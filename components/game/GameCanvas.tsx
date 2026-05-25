@@ -10,6 +10,7 @@ import {
   ArcRotateCamera,
   HemisphericLight,
   DirectionalLight,
+  MeshBuilder,
 } from '@babylonjs/core'
 
 export default function GameCanvas() {
@@ -69,8 +70,59 @@ export default function GameCanvas() {
     sunLight.intensity = 0.8
     sunLight.diffuse = new Color3(1.0, 0.95, 0.8)
 
-    // ── Render Loop ──────────────────────────────────────
+    // ── Meshes ───────────────────────────────────────────
+    // 宇宙ステーションの床
+    const ground = MeshBuilder.CreateGround(
+      'ground',
+      {
+        width: 20,
+        height: 20,
+        subdivisions: 20,
+      },
+      scene,
+    )
+    ground.position.y = 0
 
+    // タワーの台座
+    const towerBase = MeshBuilder.CreateBox(
+      'towerBase',
+      {
+        width: 1,
+        height: 0.3,
+        depth: 1,
+      },
+      scene,
+    )
+    towerBase.position = new Vector3(0, 0.15, 0)
+
+    // タワーの砲身（台座の子にする）
+    const towerBarrel = MeshBuilder.CreateCylinder(
+      'towerBarrel',
+      {
+        height: 1.5,
+        diameter: 0.3,
+        tessellation: 8,
+      },
+      scene,
+    )
+    towerBarrel.parent = towerBase
+    towerBarrel.position = new Vector3(0, 0.9, 0)
+
+    // 敵の仮置き（球）
+    const enemy = MeshBuilder.CreateSphere(
+      'enemy',
+      { diameter: 0.8, segments: 8 },
+      scene,
+    )
+    enemy.position = new Vector3(5, 0.4, 5)
+
+    const enemy2 = MeshBuilder.CreateSphere('emeny2', {
+      diameter: 0.8,
+      segments: 8,
+    })
+    enemy2.position = new Vector3(-3, 0.4, 4)
+
+    // ── Render Loop ──────────────────────────────────────
     // レンダリングループを開始（毎フレーム scene.render() が呼ばれる）
     engine.runRenderLoop(() => {
       scene.render()
