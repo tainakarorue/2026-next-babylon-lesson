@@ -11,6 +11,8 @@ import {
   HemisphericLight,
   DirectionalLight,
   MeshBuilder,
+  PBRMaterial,
+  StandardMaterial,
 } from '@babylonjs/core'
 
 export default function GameCanvas() {
@@ -116,11 +118,44 @@ export default function GameCanvas() {
     )
     enemy.position = new Vector3(5, 0.4, 5)
 
-    const enemy2 = MeshBuilder.CreateSphere('emeny2', {
+    const enemy2 = MeshBuilder.CreateSphere('enemy2', {
       diameter: 0.8,
       segments: 8,
     })
     enemy2.position = new Vector3(-3, 0.4, 4)
+
+    // ── Materials ────────────────────────────────────────
+    // 床（暗い金属）
+    const groundMat = new PBRMaterial('groundMat', scene)
+    groundMat.albedoColor = new Color3(0.15, 0.15, 0.2)
+    groundMat.metallic = 0.8
+    groundMat.roughness = 0.5
+    ground.material = groundMat
+
+    // タワー台座（金属グレー）
+    const towerBaseMat = new PBRMaterial('towerBaseMat', scene)
+    towerBaseMat.albedoColor = new Color3(0.3, 0.35, 0.4)
+    towerBaseMat.metallic = 0.9
+    towerBaseMat.roughness = 0.2
+    towerBase.material = towerBaseMat
+
+    // タワー砲身（青く光るエネルギーコア）
+    const barrelMat = new PBRMaterial('barrelMat', scene)
+    barrelMat.albedoColor = new Color3(0.1, 0.3, 0.8)
+    barrelMat.metallic = 0.5
+    barrelMat.roughness = 0.1
+    barrelMat.emissiveColor = new Color3(0, 0.5, 1.0)
+    barrelMat.emissiveIntensity = 1.5
+    towerBarrel.material = barrelMat
+
+    // 敵（赤い宇宙船）
+    const enemyMat = new StandardMaterial('enemyMat', scene)
+    enemyMat.diffuseColor = new Color3(0.8, 0.1, 0.1)
+    enemyMat.emissiveColor = new Color3(0.3, 0, 0)
+    enemyMat.specularColor = new Color3(1, 0.5, 0.5)
+    enemyMat.specularPower = 32
+    enemy.material = enemyMat
+    enemy2.material = enemyMat
 
     // ── Render Loop ──────────────────────────────────────
     // レンダリングループを開始（毎フレーム scene.render() が呼ばれる）
