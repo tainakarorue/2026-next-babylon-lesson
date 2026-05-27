@@ -11,8 +11,12 @@ import {
   HemisphericLight,
   DirectionalLight,
   MeshBuilder,
+  Mesh,
   PBRMaterial,
   StandardMaterial,
+  ActionManager,
+  ExecuteCodeAction,
+  PointerEventTypes,
 } from '@babylonjs/core'
 
 export default function GameCanvas() {
@@ -83,32 +87,6 @@ export default function GameCanvas() {
       },
       scene,
     )
-    ground.position.y = 0
-
-    // タワーの台座
-    const towerBase = MeshBuilder.CreateBox(
-      'towerBase',
-      {
-        width: 1,
-        height: 0.3,
-        depth: 1,
-      },
-      scene,
-    )
-    towerBase.position = new Vector3(0, 0.15, 0)
-
-    // タワーの砲身（台座の子にする）
-    const towerBarrel = MeshBuilder.CreateCylinder(
-      'towerBarrel',
-      {
-        height: 1.5,
-        diameter: 0.3,
-        tessellation: 8,
-      },
-      scene,
-    )
-    towerBarrel.parent = towerBase
-    towerBarrel.position = new Vector3(0, 0.9, 0)
 
     // 敵の仮置き（球）
     const enemy = MeshBuilder.CreateSphere(
@@ -137,7 +115,7 @@ export default function GameCanvas() {
     towerBaseMat.albedoColor = new Color3(0.3, 0.35, 0.4)
     towerBaseMat.metallic = 0.9
     towerBaseMat.roughness = 0.2
-    towerBase.material = towerBaseMat
+    // towerBase.material = towerBaseMat
 
     // タワー砲身（青く光るエネルギーコア）
     const barrelMat = new PBRMaterial('barrelMat', scene)
@@ -146,7 +124,7 @@ export default function GameCanvas() {
     barrelMat.roughness = 0.1
     barrelMat.emissiveColor = new Color3(0, 0.5, 1.0)
     barrelMat.emissiveIntensity = 1.5
-    towerBarrel.material = barrelMat
+    // towerBarrel.material = barrelMat
 
     // 敵（赤い宇宙船）
     const enemyMat = new StandardMaterial('enemyMat', scene)
@@ -156,6 +134,100 @@ export default function GameCanvas() {
     enemyMat.specularPower = 32
     enemy.material = enemyMat
     enemy2.material = enemyMat
+
+    // ── Tower Placement System ────────────────────────────
+    const towers: Mesh[] = []
+
+    function placeTower(position: Vector3): void {
+      // グリッドにスナップ（1 マス = 1 ユニット）
+      const gridX = Math.round(position.x)
+      const gridZ = Math.round(position.z)
+
+      // 同じグリッドに既にタワーがあればスキップ
+      const occupied = towers.some(
+        (t) =>
+          Math.round(t.position.x) === gridX &&
+          Math.round(t.position.z) === gridZ,
+      )
+
+      if (occupied) return
+
+      // 床の範囲外ならスキップ（床は -10〜10 の範囲）
+      if (Math.abs(gridX) > 9 || Math.abs(gridZ) > 9) return
+
+      const base = MeshBuilder.CreateBox(
+        `towerBase_${towers.length}`,
+        {
+          width: 1,
+          height: 0.3,
+          depth: 1,
+        },
+        scene,
+      )
+      base.position = new Vector3(gridX, 0.15, gridZ)
+      base.material = towerBaseMat
+
+      const barrel = MeshBuilder.CreateCylinder(
+        `towerBarrel_${towers.length}`,
+        {
+          height: 1.5,
+          diameter: 0.3,
+          tessellation: 8,
+        },
+        scene,
+      )
+
+      barrel.parent = base
+      barrel.position = new Vector3(0, 0.9, 0)
+      barrel.material = barrelMat
+
+      towers.push(base)
+    }
+
+    // ── Input: ポインターイベント ─────────────────────────
+    scene.onPointerObservable.add((pointerInfo) => {
+      if (pointerInfo.type !== PointerEventTypes.POINTERPICK) return
+      const pick = pointerInfo.pickInfo
+      if (!pick?.hit || !pick.pickedMesh || !pick.pickedPoint) return
+
+      // 床をクリックしたときだけタワーを設置
+      if (pick.pickedMesh.name === 'ground') {
+        placeTower(pick.pickedPoint)
+      }
+    })
+
+    // ── Input: キーボードイベント ─────────────────────────
+
+    const keysDown = new Set<string>()
+    scene.actionManager = new ActionManager(scene)
+
+    scene.actionManager.registerAction(
+      new ExecuteCodeAction(ActionManager.OnKeyDownTrigger, (evt) => {
+        keysDown.add(evt.sourceEvent.code)
+      }),
+    )
+    scene.actionManager.registerAction(
+      new ExecuteCodeAction(ActionManager.OnKeyUpTrigger, (evt) => {
+        keysDown.delete(evt.sourceEvent.code)
+      }),
+    )
+
+    // フレームごとの更新（デルタタイムで速度を均一化）
+
+    scene.registerBeforeRender(() => {
+      const delta = engine.getDeltaTime() / 1000
+
+      // Space キーでカメラをリセット（例）
+      if (keysDown.has('Space')) {
+        camera.alpha = -Math.PI / 2
+        camera.beta = Math.PI / 3
+        camera.radius = 20
+      }
+
+      // 敵をゆっくり回転させる（仮のアニメーション）
+      enemy.rotation.y += 0.5 * delta
+      enemy2.rotation.y += 0.8 * delta
+    })
 
     // ── Render Loop ──────────────────────────────────────
     // レンダリングループを開始（毎フレーム scene.render() が呼ばれる）
