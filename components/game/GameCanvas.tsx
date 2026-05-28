@@ -19,6 +19,9 @@ import {
   PointerEventTypes,
   PhysicsAggregate,
   PhysicsShapeType,
+  Animation,
+  BackEase,
+  EasingFunction,
 } from '@babylonjs/core'
 import { HavokPlugin } from '@babylonjs/core'
 import HavokPhysics from '@babylonjs/havok'
@@ -107,14 +110,6 @@ export default function GameCanvas() {
         scene,
       )
 
-      // 敵の仮置き（球）
-      const enemy = MeshBuilder.CreateSphere(
-        'enemy',
-        { diameter: 0.8, segments: 8 },
-        scene,
-      )
-      enemy.position = new Vector3(5, 3, 5)
-
       // ── Materials ────────────────────────────────────────
       // 床（暗い金属）
       const groundMat = new PBRMaterial('groundMat', scene)
@@ -128,7 +123,6 @@ export default function GameCanvas() {
       towerBaseMat.albedoColor = new Color3(0.3, 0.35, 0.4)
       towerBaseMat.metallic = 0.9
       towerBaseMat.roughness = 0.2
-      // towerBase.material = towerBaseMat
 
       // タワー砲身（青く光るエネルギーコア）
       const barrelMat = new PBRMaterial('barrelMat', scene)
@@ -137,7 +131,6 @@ export default function GameCanvas() {
       barrelMat.roughness = 0.1
       barrelMat.emissiveColor = new Color3(0, 0.5, 1.0)
       barrelMat.emissiveIntensity = 1.5
-      // towerBarrel.material = barrelMat
 
       // 敵（赤い宇宙船）
       const enemyMat = new StandardMaterial('enemyMat', scene)
@@ -145,15 +138,6 @@ export default function GameCanvas() {
       enemyMat.emissiveColor = new Color3(0.3, 0, 0)
       enemyMat.specularColor = new Color3(1, 0.5, 0.5)
       enemyMat.specularPower = 32
-      enemy.material = enemyMat
-      // enemy2.material = enemyMat
-
-      const bulletMat = new PBRMaterial('bulletMat', scene)
-      bulletMat.albedoColor = new Color3(1.0, 0.8, 0.0)
-      bulletMat.emissiveColor = new Color3(1.0, 0.5, 0.0)
-      bulletMat.emissiveIntensity = 2.0
-      bulletMat.metallic = 0
-      bulletMat.roughness = 0
 
       // ── Physics Bodies ─────────────────────────────────
       // 床は静的ボディ（mass: 0）
@@ -162,22 +146,59 @@ export default function GameCanvas() {
         PhysicsShapeType.BOX,
         {
           mass: 0,
-          restitution: 0.2,
+          // restitution: 0.2,
         },
         scene,
       )
 
-      // 敵は動的ボディ（mass > 0）
-      const enemyAggregate = new PhysicsAggregate(
-        enemy,
-        PhysicsShapeType.SPHERE,
-        {
-          mass: 1,
-          restitution: 0.5,
-          friction: 0.3,
-        },
-        scene,
-      )
+      // ── Enemies ────────────────────────────────────────
+      const enemies: Mesh[] = []
+      const enemyTimes: number[] = []
+
+      function spawnEnemy(position: Vector3): Mesh {
+        const e = MeshBuilder.CreateSphere(
+          `enemy_${enemies.length}`,
+          {
+            diameter: 0.8,
+            segments: 8,
+          },
+          scene,
+        )
+        e.position = position.clone()
+        e.material = enemyMat
+        enemies.push(e)
+        // ランダムなオフセット
+        enemyTimes.push(Math.random() * Math.PI * 2)
+        return e
+      }
+
+      spawnEnemy(new Vector3(5, 0.4, 5))
+      spawnEnemy(new Vector3(-3, 0.4, 4))
+      spawnEnemy(new Vector3(2, 0.4, -6))
+
+      // ── Tower Spawn Animation ──────────────────────────
+
+      function playSpawnAnimation(mesh: Mesh): void {
+        const scaleAnim = new Animation(
+          'spawnScale',
+          'scaling',
+          60,
+          Animation.ANIMATIONTYPE_VECTOR3,
+          // Animation.ANIMATIONLOOPMODE_CYCLE,
+          Animation.ANIMATIONLOOPMODE_CONSTANT,
+        )
+
+        const ease = new BackEase(0.5)
+        ease.setEasingMode(EasingFunction.EASINGMODE_EASEOUT)
+        scaleAnim.setEasingFunction(ease)
+        scaleAnim.setKeys([
+          { frame: 0, value: new Vector3(0.01, 0.01, 0.01) },
+          { frame: 20, value: new Vector3(1.1, 1.1, 1.1) },
+          { frame: 25, value: new Vector3(1, 1, 1) },
+        ])
+        mesh.animations = [scaleAnim]
+        scene.beginAnimation(mesh, 0, 25, false, 1.0)
+      }
 
       // ── Tower Placement System ────────────────────────────
       const towers: Mesh[] = []
@@ -211,7 +232,7 @@ export default function GameCanvas() {
         base.position = new Vector3(gridX, 0.15, gridZ)
         base.material = towerBaseMat
 
-        new PhysicsAggregate(base, PhysicsShapeType.BOX, { mass: 0 }, scene)
+        // new PhysicsAggregate(base, PhysicsShapeType.BOX, { mass: 0 }, scene)
 
         const barrel = MeshBuilder.CreateCylinder(
           `towerBarrel_${towers.length}`,
@@ -228,40 +249,7 @@ export default function GameCanvas() {
         barrel.material = barrelMat
 
         towers.push(base)
-      }
-
-      // ── Bullet Firing System ──────────────────────────
-
-      function fireBullet(from: Vector3, target: Vector3): void {
-        const bullet = MeshBuilder.CreateSphere(
-          'bullet',
-          {
-            diameter: 0.2,
-            segments: 4,
-          },
-          scene,
-        )
-        bullet.position = from.clone()
-        bullet.material = bulletMat
-
-        const bulletAgg = new PhysicsAggregate(
-          bullet,
-          PhysicsShapeType.SPHERE,
-          {
-            mass: 0.05,
-            restitution: 0.1,
-          },
-          scene,
-        )
-
-        const direction = target.subtract(from).normalize()
-        bulletAgg.body.setLinearVelocity(direction.scale(15))
-
-        // 3 秒後に自動削除
-        setTimeout(() => {
-          bulletAgg.dispose()
-          bullet.dispose()
-        }, 3000)
+        playSpawnAnimation(base)
       }
 
       // ── Input: ポインターイベント ─────────────────────────
@@ -276,36 +264,38 @@ export default function GameCanvas() {
         }
       })
 
-      // ── Input: キーボードイベント ─────────────────────────
+      // ── Per-Frame Update ───────────────────────────────
+      scene.registerBeforeRender(() => {
+        const delta = engine.getDeltaTime() / 1000
 
-      const keysDown = new Set<string>()
-      scene.actionManager = new ActionManager(scene)
+        // 敵の浮遊アニメーション
+        for (let i = 0; i < enemies.length; i++) {
+          enemyTimes[i] += delta
+          enemies[i].position.y = 0.4 + Math.sin(enemyTimes[i] * 2.5) * 0.15
+          enemies[i].rotation.y += 0.3 * delta
+        }
 
-      scene.actionManager.registerAction(
-        new ExecuteCodeAction(ActionManager.OnKeyDownTrigger, (evt) => {
-          keysDown.add(evt.sourceEvent.code)
-        }),
-      )
-      scene.actionManager.registerAction(
-        new ExecuteCodeAction(ActionManager.OnKeyUpTrigger, (evt) => {
-          keysDown.delete(evt.sourceEvent.code)
-        }),
-      )
+        // タワーの砲身が最寄りの敵を向く
 
-      scene.actionManager.registerAction(
-        new ExecuteCodeAction(
-          {
-            trigger: ActionManager.OnKeyUpTrigger,
-            parameter: 'f',
-          },
-          () => {
-            fireBullet(new Vector3(0, 1, 0), enemy.position)
-          },
-        ),
-      )
+        for (const tower of towers) {
+          if (enemies.length === 0) continue
 
-      // ── Render Loop ──────────────────────────────────────
-      // レンダリングループを開始（毎フレーム scene.render() が呼ばれる）
+          let nearest = enemies[0]
+          let minDist = Vector3.Distance(tower.position, enemies[0].position)
+
+          for (const e of enemies) {
+            const d = Vector3.Distance(tower.position, e.position)
+            if (d < minDist) {
+              minDist = d
+              nearest = e
+            }
+          }
+
+          const dir = nearest.position.subtract(tower.position)
+          tower.rotation.y = Math.atan2(dir.x, dir.z)
+        }
+      })
+
       engine.runRenderLoop(() => {
         scene.render()
       })
