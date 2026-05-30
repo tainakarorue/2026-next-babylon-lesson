@@ -22,9 +22,13 @@ import {
   Animation,
   BackEase,
   EasingFunction,
+  // SceneLoader,
+  // AssetsManager,
+  ImportMeshAsync,
 } from '@babylonjs/core'
 import { HavokPlugin } from '@babylonjs/core'
 import HavokPhysics from '@babylonjs/havok'
+import '@babylonjs/loaders/glTF'
 
 export default function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -118,6 +122,18 @@ export default function GameCanvas() {
       groundMat.roughness = 0.5
       ground.material = groundMat
 
+      // ── Physics Bodies ─────────────────────────────────
+      // 床は静的ボディ（mass: 0）
+
+      new PhysicsAggregate(
+        ground,
+        PhysicsShapeType.BOX,
+        {
+          mass: 0,
+        },
+        scene,
+      )
+
       // タワー台座（金属グレー）
       const towerBaseMat = new PBRMaterial('towerBaseMat', scene)
       towerBaseMat.albedoColor = new Color3(0.3, 0.35, 0.4)
@@ -136,45 +152,102 @@ export default function GameCanvas() {
       const enemyMat = new StandardMaterial('enemyMat', scene)
       enemyMat.diffuseColor = new Color3(0.8, 0.1, 0.1)
       enemyMat.emissiveColor = new Color3(0.3, 0, 0)
-      enemyMat.specularColor = new Color3(1, 0.5, 0.5)
-      enemyMat.specularPower = 32
+      // enemyMat.specularColor = new Color3(1, 0.5, 0.5)
+      // enemyMat.specularPower = 32
 
-      // ── Physics Bodies ─────────────────────────────────
-      // 床は静的ボディ（mass: 0）
-      new PhysicsAggregate(
-        ground,
-        PhysicsShapeType.BOX,
-        {
-          mass: 0,
-          // restitution: 0.2,
-        },
-        scene,
-      )
+      // ── Asset Loading ──────────────────────────────────
+      // 敵モデルのテンプレートを作成
+      // モデルファイルがあれば GLB を読み込み、なければ球で代替する
 
-      // ── Enemies ────────────────────────────────────────
-      const enemies: Mesh[] = []
-      const enemyTimes: number[] = []
+      let enemyTemplate: Mesh
 
-      function spawnEnemy(position: Vector3): Mesh {
-        const e = MeshBuilder.CreateSphere(
-          `enemy_${enemies.length}`,
+      try {
+        // const result = await SceneLoader.ImportMeshAsync(
+        //   '',
+        //   '/model/',
+        //   'enemy.glb',
+        //   scene,
+        // )
+        const result = await ImportMeshAsync('/model/enemy.glb', scene, {
+          meshNames: '',
+        })
+
+        enemyTemplate = result.meshes[0] as Mesh
+        enemyTemplate.name = 'enemyTemplate'
+        enemyTemplate.setEnabled(false)
+
+        // 付属アニメーションがあれば確認
+        result.animationGroups.forEach((g) => {
+          console.log('アニメーション', g.name)
+          g.stop()
+        })
+      } catch {
+        // GLB がない場合は球で代替
+        enemyTemplate = MeshBuilder.CreateSphere(
+          'enemyTemplate',
           {
             diameter: 0.8,
             segments: 8,
           },
           scene,
         )
-        e.position = position.clone()
-        e.material = enemyMat
-        enemies.push(e)
-        // ランダムなオフセット
-        enemyTimes.push(Math.random() * Math.PI * 2)
-        return e
+        enemyTemplate.material = enemyMat
+        enemyTemplate.setEnabled(false)
       }
 
-      spawnEnemy(new Vector3(5, 0.4, 5))
-      spawnEnemy(new Vector3(-3, 0.4, 4))
-      spawnEnemy(new Vector3(2, 0.4, -6))
+      // タワーモデルのテンプレート
+      let towerTemplate: Mesh | null = null
+
+      try {
+        // const result = await SceneLoader.ImportMeshAsync(
+        //   '',
+        //   '/model/',
+        //   'tower.glb',
+        //   scene,
+        // )
+        const result = await ImportMeshAsync('/model/tower.glb', scene, {
+          meshNames: '',
+        })
+        towerTemplate = result.meshes[0] as Mesh
+        towerTemplate.name = 'towerTemplate'
+        towerTemplate.setEnabled(false)
+      } catch {
+        // GLB がない場合は null のまま（箱で代替）
+        towerTemplate = null
+      }
+
+      // ── Enemies ────────────────────────────────────────
+      const enemies: Mesh[] = []
+      const enemyTimes: number[] = []
+
+      function spawnEnemy(position: Vector3): void {
+        let mesh: Mesh
+        const clone = enemyTemplate.clone(`enemy_${enemies.length}`, null)
+        if (clone) {
+          mesh = clone
+          // mesh.setEnabled(false)
+          mesh.setEnabled(true)
+        } else {
+          mesh = MeshBuilder.CreateSphere(
+            `enemy_${enemies.length}`,
+            {
+              diameter: 0.8,
+              segments: 8,
+            },
+            scene,
+          )
+          mesh.material = enemyMat
+        }
+
+        mesh.position = position.clone()
+        mesh.scaling = new Vector3(0.5, 0.5, 0.5)
+        enemies.push(mesh)
+        enemyTimes.push(Math.random() * Math.PI * 2)
+      }
+
+      spawnEnemy(new Vector3(5, 0.5, 5))
+      spawnEnemy(new Vector3(-3, 0.5, 4))
+      spawnEnemy(new Vector3(2, 0.5, -6))
 
       // ── Tower Spawn Animation ──────────────────────────
 
@@ -184,7 +257,6 @@ export default function GameCanvas() {
           'scaling',
           60,
           Animation.ANIMATIONTYPE_VECTOR3,
-          // Animation.ANIMATIONLOOPMODE_CYCLE,
           Animation.ANIMATIONLOOPMODE_CONSTANT,
         )
 
@@ -220,33 +292,64 @@ export default function GameCanvas() {
         // 床の範囲外ならスキップ（床は -10〜10 の範囲）
         if (Math.abs(gridX) > 9 || Math.abs(gridZ) > 9) return
 
-        const base = MeshBuilder.CreateBox(
-          `towerBase_${towers.length}`,
-          {
-            width: 1,
-            height: 0.3,
-            depth: 1,
-          },
-          scene,
-        )
-        base.position = new Vector3(gridX, 0.15, gridZ)
-        base.material = towerBaseMat
+        let base: Mesh
+        if (towerTemplate) {
+          const clone = towerTemplate.clone(`tower_${towers.length}`, null)
 
-        // new PhysicsAggregate(base, PhysicsShapeType.BOX, { mass: 0 }, scene)
+          if (clone) {
+            base = clone
+            base.setEnabled(true)
+            base.position = new Vector3(gridX, 0, gridZ)
+            base.scaling = new Vector3(0.5, 0.5, 0.5)
+          } else {
+            base = MeshBuilder.CreateBox(
+              `tower_${towers.length}`,
+              {
+                width: 1,
+                height: 0.3,
+                depth: 1,
+              },
+              scene,
+            )
+            base.position = new Vector3(gridX, 0.15, gridZ)
+            base.material = towerBaseMat
+          }
+        } else {
+          base = MeshBuilder.CreateBox(
+            `towerBase_${towers.length}`,
+            {
+              width: 1,
+              height: 0.3,
+              depth: 1,
+            },
+            scene,
+          )
 
-        const barrel = MeshBuilder.CreateCylinder(
-          `towerBarrel_${towers.length}`,
-          {
-            height: 1.5,
-            diameter: 0.3,
-            tessellation: 8,
-          },
-          scene,
-        )
+          base.position = new Vector3(gridX, 0.15, gridZ)
+          base.material = towerBaseMat
 
-        barrel.parent = base
-        barrel.position = new Vector3(0, 0.9, 0)
-        barrel.material = barrelMat
+          const barrel = MeshBuilder.CreateCylinder(
+            `towerBarrel_${towers.length}`,
+            {
+              height: 1.5,
+              diameter: 0.3,
+              tessellation: 8,
+            },
+            scene,
+          )
+          barrel.parent = base
+          barrel.position = new Vector3(0, 0.9, 0)
+          barrel.material = barrelMat
+        }
+
+        // new PhysicsAggregate(
+        //   base,
+        //   PhysicsShapeType.BOX,
+        //   {
+        //     mass: 0,
+        //   },
+        //   scene,
+        // )
 
         towers.push(base)
         playSpawnAnimation(base)
