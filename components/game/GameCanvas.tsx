@@ -14,17 +14,16 @@ import {
   Mesh,
   PBRMaterial,
   StandardMaterial,
-  ActionManager,
-  ExecuteCodeAction,
   PointerEventTypes,
   PhysicsAggregate,
   PhysicsShapeType,
   Animation,
   BackEase,
   EasingFunction,
-  // SceneLoader,
-  // AssetsManager,
   ImportMeshAsync,
+  ParticleSystem,
+  GPUParticleSystem,
+  DynamicTexture,
 } from '@babylonjs/core'
 import { HavokPlugin } from '@babylonjs/core'
 import HavokPhysics from '@babylonjs/havok'
@@ -152,8 +151,113 @@ export default function GameCanvas() {
       const enemyMat = new StandardMaterial('enemyMat', scene)
       enemyMat.diffuseColor = new Color3(0.8, 0.1, 0.1)
       enemyMat.emissiveColor = new Color3(0.3, 0, 0)
-      // enemyMat.specularColor = new Color3(1, 0.5, 0.5)
-      // enemyMat.specularPower = 32
+
+      const bulletMat = new PBRMaterial('bulletMat', scene)
+      bulletMat.albedoColor = new Color3(1.0, 0.8, 0.0)
+      bulletMat.emissiveColor = new Color3(1.0, 0.5, 0.0)
+      bulletMat.emissiveIntensity = 2.0
+      bulletMat.metallic = 0
+      bulletMat.roughness = 0
+
+      // ── Stars Background ───────────────────────────────
+      // const stars = new GPUParticleSystem(
+      //   'stars',
+      //   {
+      //     capacity: 2000,
+      //   },
+      //   scene,
+      // )
+
+      // ── Particle Texture ────────────────────────────────
+      const particleTex = new DynamicTexture(
+        'particleTex',
+        {
+          width: 64,
+          height: 64,
+        },
+        scene,
+        false,
+      )
+      const ctx = particleTex.getContext()
+      const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
+      grad.addColorStop(0, 'rgba(255,255,255,1)')
+      grad.addColorStop(1, 'rgba(255,255,255,0)')
+      ctx.fillStyle = grad
+      ctx.fillRect(0, 0, 64, 64)
+      particleTex.update()
+
+      const stars = GPUParticleSystem.IsSupported
+        ? new GPUParticleSystem(
+            'stars',
+            {
+              capacity: 2000,
+            },
+            scene,
+          )
+        : new ParticleSystem('stars', 2000, scene)
+
+      stars.particleTexture = particleTex
+
+      stars.emitter = new Vector3(0, 0, 0)
+      stars.createSphereEmitter(30)
+      stars.minLifeTime = 120
+      stars.maxLifeTime = 120
+      stars.minEmitPower = 0
+      stars.maxEmitPower = 0
+      stars.gravity = new Vector3(0, 0, 0)
+      stars.color1 = new Color4(1, 1, 1, 0.8)
+      stars.color2 = new Color4(0.8, 0.9, 1, 0.6)
+      stars.colorDead = new Color4(1, 1, 1, 0)
+      stars.minSize = 0.02
+      stars.maxSize = 0.08
+      stars.emitRate = 15
+      // stars.emitRate = 500
+      stars.blendMode = ParticleSystem.BLENDMODE_ONEONE
+      stars.start()
+
+      // ── Explosion Effect ───────────────────────────────
+
+      function createExpolosion(position: Vector3): void {
+        const ps = new ParticleSystem('explosion', 150, scene)
+
+        ps.particleTexture = particleTex
+
+        ps.emitter = position.clone()
+        ps.minEmitBox = new Vector3(-0.1, -0.1, -0.1)
+        ps.maxEmitBox = new Vector3(0.1, 0.1, 0.1)
+        ps.minLifeTime = 0.2
+        ps.maxLifeTime = 0.8
+        ps.minEmitPower = 3
+        ps.maxEmitPower = 8
+        ps.direction1 = new Vector3(-1, -1, -1)
+        ps.direction2 = new Vector3(1, 1, 1)
+        ps.gravity = new Vector3(0, -3, 0)
+        ps.color1 = new Color4(1, 0.6, 0, 1)
+        ps.color2 = new Color4(1, 0.1, 0, 1)
+        ps.colorDead = new Color4(0.1, 0.1, 0.1, 0)
+        ps.minSize = 0.1
+        ps.maxSize = 0.4
+        ps.emitRate = 500
+        ps.blendMode = ParticleSystem.BLENDMODE_ONEONE
+
+        ps.targetStopDuration = 0.15
+        // disposeOnStop は使わない（disposeTexture=trueがデフォルトで共有テクスチャを破棄するため）
+        // ps.disposeOnStop = true
+        ps.start()
+
+        // パーティクルが消えてから手動で後始末（テクスチャは破棄しない）
+        // targetStopDuration(0.15) + maxLifeTime(0.8) = 0.95s → 余裕を持って 2s
+        let elapsed = 0
+        const cleanup = () => {
+          elapsed += engine.getDeltaTime() / 1000
+          if (elapsed >= 2.0) {
+            ps.dispose(false) // false =
+            // テクスチャは破棄しない
+            scene.unregisterAfterRender(cleanup)
+          }
+        }
+        scene.registerAfterRender(cleanup)
+      }
 
       // ── Asset Loading ──────────────────────────────────
       // 敵モデルのテンプレートを作成
@@ -195,6 +299,9 @@ export default function GameCanvas() {
         enemyTemplate.setEnabled(false)
       }
 
+      // クリーンアップ済みなら中断
+      if (cancelled) return
+
       // タワーモデルのテンプレート
       let towerTemplate: Mesh | null = null
 
@@ -216,6 +323,9 @@ export default function GameCanvas() {
         towerTemplate = null
       }
 
+      // クリーンアップ済みなら中断
+      if (cancelled) return
+
       // ── Enemies ────────────────────────────────────────
       const enemies: Mesh[] = []
       const enemyTimes: number[] = []
@@ -225,7 +335,6 @@ export default function GameCanvas() {
         const clone = enemyTemplate.clone(`enemy_${enemies.length}`, null)
         if (clone) {
           mesh = clone
-          // mesh.setEnabled(false)
           mesh.setEnabled(true)
         } else {
           mesh = MeshBuilder.CreateSphere(
@@ -243,6 +352,13 @@ export default function GameCanvas() {
         mesh.scaling = new Vector3(0.5, 0.5, 0.5)
         enemies.push(mesh)
         enemyTimes.push(Math.random() * Math.PI * 2)
+      }
+
+      function killEnemy(index: number): void {
+        createExpolosion(enemies[index].position.clone())
+        enemies[index].dispose()
+        enemies.splice(index, 1)
+        enemyTimes.splice(index, 1)
       }
 
       spawnEnemy(new Vector3(5, 0.5, 5))
@@ -355,6 +471,42 @@ export default function GameCanvas() {
         playSpawnAnimation(base)
       }
 
+      // ── Bullet System
+      const activeBullets: {
+        mesh: Mesh
+        agg: PhysicsAggregate
+        target: Mesh
+        timer: number
+      }[] = []
+
+      function fireBullet(from: Vector3, target: Mesh): void {
+        const bullet = MeshBuilder.CreateSphere(
+          'bullet',
+          {
+            diameter: 0.2,
+            segments: 4,
+          },
+          scene,
+        )
+
+        bullet.position = from.clone()
+        bullet.material = bulletMat
+
+        const agg = new PhysicsAggregate(
+          bullet,
+          PhysicsShapeType.SPHERE,
+          {
+            mass: 0.05,
+          },
+          scene,
+        )
+
+        const dir = target.position.subtract(from).normalize()
+        agg.body.setLinearVelocity(dir.scale(15))
+
+        activeBullets.push({ mesh: bullet, agg, target, timer: 0 })
+      }
+
       // ── Input: ポインターイベント ─────────────────────────
       scene.onPointerObservable.add((pointerInfo) => {
         if (pointerInfo.type !== PointerEventTypes.POINTERPICK) return
@@ -365,9 +517,20 @@ export default function GameCanvas() {
         if (pick.pickedMesh.name === 'ground') {
           placeTower(pick.pickedPoint)
         }
+        // 敵をクリックすると即撃破（デモ用）
+        const clickedEnemyIndex = enemies.findIndex(
+          (e) => pick.pickedMesh === e,
+        )
+        if (clickedEnemyIndex !== -1) {
+          killEnemy(clickedEnemyIndex)
+        }
       })
 
       // ── Per-Frame Update ───────────────────────────────
+
+      const TOWER_FIRE_INTERVAL = 2.0
+      const towerFireTimers: number[] = []
+
       scene.registerBeforeRender(() => {
         const delta = engine.getDeltaTime() / 1000
 
@@ -378,24 +541,53 @@ export default function GameCanvas() {
           enemies[i].rotation.y += 0.3 * delta
         }
 
-        // タワーの砲身が最寄りの敵を向く
+        // タワーの追跡と発射
+        while (towerFireTimers.length < towers.length) towerFireTimers.push(0)
 
-        for (const tower of towers) {
+        for (let i = 0; i < towers.length; i++) {
           if (enemies.length === 0) continue
-
           let nearest = enemies[0]
-          let minDist = Vector3.Distance(tower.position, enemies[0].position)
+          let minDist = Vector3.Distance(
+            towers[i].position,
+            enemies[0].position,
+          )
 
           for (const e of enemies) {
-            const d = Vector3.Distance(tower.position, e.position)
+            // const d = Vector3.Distance(towers[i].position, enemies[i].position)
+            const d = Vector3.Distance(towers[i].position, e.position)
             if (d < minDist) {
               minDist = d
               nearest = e
             }
           }
 
-          const dir = nearest.position.subtract(tower.position)
-          tower.rotation.y = Math.atan2(dir.x, dir.z)
+          const dir = nearest.position.subtract(towers[i].position)
+          towers[i].rotation.y = Math.atan2(dir.x, dir.z)
+
+          towerFireTimers[i] += delta
+          if (towerFireTimers[i] >= TOWER_FIRE_INTERVAL) {
+            towerFireTimers[i] = 0
+            const muzzlePos = towers[i].position.clone()
+            muzzlePos.y += 0.9
+            fireBullet(muzzlePos, nearest)
+          }
+        }
+
+        for (let bi = activeBullets.length - 1; bi >= 0; bi--) {
+          const b = activeBullets[bi]
+          b.timer += delta
+
+          const dist = Vector3.Distance(b.mesh.position, b.target.position)
+
+          if (dist < 0.8 || b.timer > 4) {
+            if (dist < 0.8) {
+              const ei = enemies.indexOf(b.target)
+              if (ei !== -1) killEnemy(ei)
+            }
+            b.agg.dispose()
+            b.mesh.dispose()
+            activeBullets.splice(bi, 1)
+          }
         }
       })
 
