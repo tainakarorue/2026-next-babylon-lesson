@@ -217,7 +217,7 @@ export default function GameCanvas() {
 
       // ── Explosion Effect ───────────────────────────────
 
-      function createExpolosion(position: Vector3): void {
+      function createExplosion(position: Vector3): void {
         const ps = new ParticleSystem('explosion', 150, scene)
 
         ps.particleTexture = particleTex
@@ -355,7 +355,7 @@ export default function GameCanvas() {
       }
 
       function killEnemy(index: number): void {
-        createExpolosion(enemies[index].position.clone())
+        createExplosion(enemies[index].position.clone())
         enemies[index].dispose()
         enemies.splice(index, 1)
         enemyTimes.splice(index, 1)
@@ -576,6 +576,14 @@ export default function GameCanvas() {
         for (let bi = activeBullets.length - 1; bi >= 0; bi--) {
           const b = activeBullets[bi]
           b.timer += delta
+
+          // ターゲットが既に破棄されている場合は弾を削除
+          if (!b.target || b.target.isDisposed()) {
+            b.agg.dispose()
+            b.mesh.dispose()
+            activeBullets.splice(bi, 1)
+            continue
+          }
 
           const dist = Vector3.Distance(b.mesh.position, b.target.position)
 
