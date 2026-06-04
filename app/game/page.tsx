@@ -36,7 +36,7 @@ export default function GamePage() {
       lives?: number
       wave?: number
     }) => {
-      if (event.type === 'SCORE_CHAGED' && event.score !== undefined)
+      if (event.type === 'SCORE_CHANGED' && event.score !== undefined)
         setScore(event.score)
 
       if (event.type === 'LIFE_CHANGED' && event.lives !== undefined)
@@ -65,7 +65,11 @@ export default function GamePage() {
 
   return (
     <main className="w-full h-screen overflow-hidden bg-black">
-      <GameCanvas />
+      <GameCanvas
+        gameState={gameState}
+        onGameEvent={handleGameEvent}
+        controlRef={gameControlRef}
+      />
       <HUD
         score={score}
         lives={lives}

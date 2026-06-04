@@ -25,9 +25,7 @@ export function HUD({
             NEBULA DEFENSE
           </h1>
           <p className="text-gray-400 mb-8">
-            <p className="text-gray-400 mb-8">
-              床をクリックしてタワーを設置し、敵の侵攻を防げ
-            </p>
+            床をクリックしてタワーを設置し、敵の侵攻を防げ
           </p>
           <button
             onClick={onStart}
