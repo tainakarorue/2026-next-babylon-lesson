@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, MutableRefObject } from 'react'
 import {
   Engine,
   Scene,
@@ -29,7 +29,65 @@ import { HavokPlugin } from '@babylonjs/core'
 import HavokPhysics from '@babylonjs/havok'
 import '@babylonjs/loaders/glTF'
 
-export default function GameCanvas() {
+import type { GameEventCallback } from '@/app/game/page'
+
+interface GameCanvasProps {
+  gameState: 'menu' | 'playing' | 'pause' | 'gameover'
+  onGameEvent: GameEventCallback
+  controlRef: MutableRefObject<{
+    start: () => void
+    restart: () => void
+  } | null>
+}
+
+interface WaveConfig {
+  enemyCount: number
+  spawnInterval: number
+  enemySpeed: number
+  scorePerKill: number
+}
+
+const WAVES: WaveConfig[] = [
+  {
+    enemyCount: 3,
+    spawnInterval: 2.0,
+    enemySpeed: 1.0,
+    scorePerKill: 10,
+  },
+  {
+    enemyCount: 5,
+    spawnInterval: 1.5,
+    enemySpeed: 1.2,
+    scorePerKill: 15,
+  },
+  {
+    enemyCount: 8,
+    spawnInterval: 1.0,
+    enemySpeed: 1.5,
+    scorePerKill: 20,
+  },
+  {
+    enemyCount: 12,
+    spawnInterval: 0.8,
+    enemySpeed: 2.0,
+    scorePerKill: 30,
+  },
+]
+
+const SPAWN_POINTS = [
+  new Vector3(9, 0.5, 9),
+  new Vector3(-9, 0.5, 9),
+  new Vector3(9, 0.5, -9),
+  new Vector3(-9, 0.5, -9),
+]
+
+const BASE_POSITION = new Vector3(0, 0.5, 0)
+
+export default function GameCanvas({
+  gameState: externalGameState,
+  onGameEvent,
+  controlRef,
+}: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -159,14 +217,26 @@ export default function GameCanvas() {
       bulletMat.metallic = 0
       bulletMat.roughness = 0
 
-      // ── Stars Background ───────────────────────────────
-      // const stars = new GPUParticleSystem(
-      //   'stars',
-      //   {
-      //     capacity: 2000,
-      //   },
-      //   scene,
-      // )
+      const baseMat = new PBRMaterial('baseMat', scene)
+      baseMat.albedoColor = new Color3(0.2, 0.8, 0.2)
+      baseMat.emissiveColor = new Color3(0, 0.3, 0)
+      baseMat.metallic = 0.5
+      baseMat.roughness = 0.3
+
+      // ── Base（守るべき拠点）────────────────────────────
+      const base = MeshBuilder.CreateCylinder(
+        'base',
+        {
+          height: 0.3,
+          diameter: 2,
+          tessellation: 16,
+        },
+        scene,
+      )
+      base.position = BASE_POSITION.clone()
+      base.position.y = 0.15
+      base.material = baseMat
+      new PhysicsAggregate(base, PhysicsShapeType.CYLINDER, { mass: 0 }, scene)
 
       // ── Particle Texture ────────────────────────────────
       const particleTex = new DynamicTexture(
@@ -185,6 +255,8 @@ export default function GameCanvas() {
       ctx.fillStyle = grad
       ctx.fillRect(0, 0, 64, 64)
       particleTex.update()
+
+      // ── Stars Background ───────────────────────────────
 
       const stars = GPUParticleSystem.IsSupported
         ? new GPUParticleSystem(
@@ -214,6 +286,17 @@ export default function GameCanvas() {
       // stars.emitRate = 500
       stars.blendMode = ParticleSystem.BLENDMODE_ONEONE
       stars.start()
+
+      // ── Game State ─────────────────────────────────────
+      let playing = false
+      let score = 0
+      let lives = 20
+      let currentWaveIndex = 0
+      let waveEnemiesRemaining = 0
+      let waveEnemiesSpawnd = 0
+      let spawnTimer = 0
+      let betweenWaveTimer = 0
+      const BETWEEN_WAVE_DELAY = 5 // 秒
 
       // ── Explosion Effect ───────────────────────────────
 
@@ -327,46 +410,101 @@ export default function GameCanvas() {
       if (cancelled) return
 
       // ── Enemies ────────────────────────────────────────
-      const enemies: Mesh[] = []
-      const enemyTimes: number[] = []
+      // const enemies: Mesh[] = []
+      // const enemyTimes: number[] = []
 
-      function spawnEnemy(position: Vector3): void {
-        let mesh: Mesh
-        const clone = enemyTemplate.clone(`enemy_${enemies.length}`, null)
-        if (clone) {
-          mesh = clone
-          mesh.setEnabled(true)
-        } else {
-          mesh = MeshBuilder.CreateSphere(
-            `enemy_${enemies.length}`,
-            {
-              diameter: 0.8,
-              segments: 8,
-            },
-            scene,
-          )
-          mesh.material = enemyMat
-        }
+      // function spawnEnemy(position: Vector3): void {
+      //   let mesh: Mesh
+      //   const clone = enemyTemplate.clone(`enemy_${enemies.length}`, null)
+      //   if (clone) {
+      //     mesh = clone
+      //     mesh.setEnabled(true)
+      //   } else {
+      //     mesh = MeshBuilder.CreateSphere(
+      //       `enemy_${enemies.length}`,
+      //       {
+      //         diameter: 0.8,
+      //         segments: 8,
+      //       },
+      //       scene,
+      //     )
+      //     mesh.material = enemyMat
+      //   }
 
-        mesh.position = position.clone()
-        mesh.scaling = new Vector3(0.5, 0.5, 0.5)
-        enemies.push(mesh)
-        enemyTimes.push(Math.random() * Math.PI * 2)
+      //   mesh.position = position.clone()
+      //   mesh.scaling = new Vector3(0.5, 0.5, 0.5)
+      //   enemies.push(mesh)
+      //   enemyTimes.push(Math.random() * Math.PI * 2)
+      // }
+
+      const enemies: { mesh: Mesh; speed: number; time: number }[] = []
+
+      function spawnEnemy(waveConfig: WaveConfig): void {
+        const spawnPoint =
+          SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)]
+
+        const mesh = MeshBuilder.CreateSphere(
+          `enemy_${Date.now()}`,
+          {
+            diameter: 0.8,
+            segments: 8,
+          },
+          scene,
+        )
+
+        mesh.position = spawnPoint.clone()
+        mesh.material = enemyMat
+
+        enemies.push({
+          mesh,
+          speed: waveConfig.enemySpeed,
+          time: Math.random() * Math.PI * 2,
+        })
+
+        waveEnemiesSpawnd++
+        waveEnemiesRemaining++
       }
 
-      function killEnemy(index: number): void {
-        createExplosion(enemies[index].position.clone())
-        enemies[index].dispose()
+      // function killEnemy(index: number): void {
+      //   createExplosion(enemies[index].position.clone())
+      //   enemies[index].dispose()
+      //   enemies.splice(index, 1)
+      //   enemyTimes.splice(index, 1)
+      // }
+
+      function killEnemy(index: number, fromWave: WaveConfig): void {
+        createExplosion(enemies[index].mesh.position.clone())
+
+        enemies[index].mesh.dispose()
         enemies.splice(index, 1)
-        enemyTimes.splice(index, 1)
+        waveEnemiesRemaining--
+        score += fromWave.scorePerKill
+        onGameEvent({ type: 'SCORE_CHANGED', score })
       }
 
-      spawnEnemy(new Vector3(5, 0.5, 5))
-      spawnEnemy(new Vector3(-3, 0.5, 4))
-      spawnEnemy(new Vector3(2, 0.5, -6))
+      function enemyReachsBase(index: number): void {
+        createExplosion(enemies[index].mesh.position.clone())
+        enemies[index].mesh.dispose()
+        enemies.splice(index, 1)
+        waveEnemiesRemaining--
+        lives -= 1
+        onGameEvent({ type: 'LIFE_CHANGED', lives })
+        if (lives <= 0) {
+          playing = false
+          onGameEvent({ type: 'GAME_OVER', score })
+        }
+      }
+
+      // spawnEnemy(new Vector3(5, 0.5, 5))
+      // spawnEnemy(new Vector3(-3, 0.5, 4))
+      // spawnEnemy(new Vector3(2, 0.5, -6))
+
+      // ── Tower Placement System ────────────────────────────
+      // 次回配信１０－３はここから
+      const towers: Mesh[] = []
+      const towerFireTimers: number[] = []
 
       // ── Tower Spawn Animation ──────────────────────────
-
       function playSpawnAnimation(mesh: Mesh): void {
         const scaleAnim = new Animation(
           'spawnScale',
@@ -387,9 +525,6 @@ export default function GameCanvas() {
         mesh.animations = [scaleAnim]
         scene.beginAnimation(mesh, 0, 25, false, 1.0)
       }
-
-      // ── Tower Placement System ────────────────────────────
-      const towers: Mesh[] = []
 
       function placeTower(position: Vector3): void {
         // グリッドにスナップ（1 マス = 1 ユニット）
@@ -529,7 +664,7 @@ export default function GameCanvas() {
       // ── Per-Frame Update ───────────────────────────────
 
       const TOWER_FIRE_INTERVAL = 2.0
-      const towerFireTimers: number[] = []
+      // const towerFireTimers: number[] = []
 
       scene.registerBeforeRender(() => {
         const delta = engine.getDeltaTime() / 1000
