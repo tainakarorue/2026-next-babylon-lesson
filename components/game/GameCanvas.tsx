@@ -293,7 +293,7 @@ export default function GameCanvas({
       let lives = 20
       let currentWaveIndex = 0
       let waveEnemiesRemaining = 0
-      let waveEnemiesSpawnd = 0
+      let waveEnemiesSpawned = 0
       let spawnTimer = 0
       let betweenWaveTimer = 0
       const BETWEEN_WAVE_DELAY = 5 // 秒
@@ -461,7 +461,7 @@ export default function GameCanvas({
           time: Math.random() * Math.PI * 2,
         })
 
-        waveEnemiesSpawnd++
+        waveEnemiesSpawned++
         waveEnemiesRemaining++
       }
 
@@ -500,7 +500,6 @@ export default function GameCanvas({
       // spawnEnemy(new Vector3(2, 0.5, -6))
 
       // ── Tower Placement System ────────────────────────────
-      // 次回配信１０－３はここから
       const towers: Mesh[] = []
       const towerFireTimers: number[] = []
 
@@ -603,6 +602,7 @@ export default function GameCanvas({
         // )
 
         towers.push(base)
+        towerFireTimers.push(0)
         playSpawnAnimation(base)
       }
 
@@ -610,11 +610,18 @@ export default function GameCanvas({
       const activeBullets: {
         mesh: Mesh
         agg: PhysicsAggregate
-        target: Mesh
+        targetIndex: number
         timer: number
+        waveConfig: WaveConfig
       }[] = []
 
-      function fireBullet(from: Vector3, target: Mesh): void {
+      function fireBullet(
+        from: Vector3,
+        targetIndex: number,
+        waveConfig: WaveConfig,
+      ): void {
+        if (targetIndex < 0 || targetIndex >= enemies.length) return
+
         const bullet = MeshBuilder.CreateSphere(
           'bullet',
           {
@@ -636,10 +643,53 @@ export default function GameCanvas({
           scene,
         )
 
-        const dir = target.position.subtract(from).normalize()
+        const dir = enemies[targetIndex].mesh.position
+          .subtract(from)
+          .normalize()
         agg.body.setLinearVelocity(dir.scale(15))
 
-        activeBullets.push({ mesh: bullet, agg, target, timer: 0 })
+        activeBullets.push({
+          mesh: bullet,
+          agg,
+          targetIndex,
+          timer: 0,
+          waveConfig,
+        })
+      }
+
+      // ── Game Start/Restart ─────────────────────────────
+      function startWave(waveIndex: number): void {
+        const wave = WAVES[Math.min(waveIndex, WAVES.length - 1)]
+        waveEnemiesSpawned = 0
+        waveEnemiesRemaining = wave.enemyCount
+        spawnTimer = 0
+        onGameEvent({ type: 'WAVE_STARTED', wave: waveIndex + 1 })
+      }
+
+      function startGame(): void {
+        playing = true
+        score = 0
+        lives = 20
+        currentWaveIndex = 0
+        betweenWaveTimer = 0
+        // 既存の敵を全削除
+        for (const e of enemies) e.mesh.dispose()
+        enemies.length = 0
+        startWave(0)
+      }
+
+      function restartGame(): void {
+        // タワーを全削除
+        for (const t of towers) t.dispose()
+        towers.length = 0
+        towerFireTimers.length = 0
+        startGame()
+      }
+
+      // controlRef に外部 API を登録
+      controlRef.current = {
+        start: startGame,
+        restart: restartGame,
       }
 
       // ── Input: ポインターイベント ─────────────────────────
@@ -652,84 +702,120 @@ export default function GameCanvas({
         if (pick.pickedMesh.name === 'ground') {
           placeTower(pick.pickedPoint)
         }
-        // 敵をクリックすると即撃破（デモ用）
-        const clickedEnemyIndex = enemies.findIndex(
-          (e) => pick.pickedMesh === e,
-        )
-        if (clickedEnemyIndex !== -1) {
-          killEnemy(clickedEnemyIndex)
-        }
       })
 
       // ── Per-Frame Update ───────────────────────────────
 
-      const TOWER_FIRE_INTERVAL = 2.0
-      // const towerFireTimers: number[] = []
-
       scene.registerBeforeRender(() => {
-        const delta = engine.getDeltaTime() / 1000
+        if (!playing) return
 
-        // 敵の浮遊アニメーション
-        for (let i = 0; i < enemies.length; i++) {
-          enemyTimes[i] += delta
-          enemies[i].position.y = 0.4 + Math.sin(enemyTimes[i] * 2.5) * 0.15
-          enemies[i].rotation.y += 0.3 * delta
+        const delta = engine.getDeltaTime() / 1000
+        const currentWave = WAVES[Math.min(currentWaveIndex, WAVES.length - 1)]
+
+        // 敵のスポーン
+
+        if (waveEnemiesSpawned < currentWave.enemyCount) {
+          spawnTimer += delta
+          if (spawnTimer >= currentWave.spawnInterval) {
+            spawnTimer = 0
+            spawnEnemy(currentWave)
+          }
         }
 
-        // タワーの追跡と発射
-        while (towerFireTimers.length < towers.length) towerFireTimers.push(0)
+        // ウェーブクリア判定
+        if (
+          waveEnemiesSpawned >= currentWave.enemyCount &&
+          enemies.length === 0
+        ) {
+          betweenWaveTimer += delta
+          if (betweenWaveTimer >= BETWEEN_WAVE_DELAY) {
+            betweenWaveTimer = 0
+            currentWaveIndex++
+            if (currentWaveIndex >= WAVES.length) {
+              // 最終ウェーブクリア → ループ（難易度上昇付き）
+              currentWaveIndex = WAVES.length - 1
+            }
+            startWave(currentWaveIndex)
+          }
+        }
 
+        // 敵の移動（拠点に向かって移動）
+
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          const e = enemies[i]
+          e.time += delta
+          // 拠点方向に移動
+          const dir = BASE_POSITION.subtract(e.mesh.position)
+          const dist = dir.length()
+          if (dist < 1.0) {
+            enemyReachsBase(i)
+            continue
+          }
+          e.mesh.position.addInPlace(dir.normalize().scale(e.speed * delta))
+          e.mesh.position.y = 0.5 + Math.sin(e.time * 2.5) * 0.15
+          e.mesh.rotation.y += 0.3 * delta
+        }
+
+        // タワーの発射
         for (let i = 0; i < towers.length; i++) {
           if (enemies.length === 0) continue
-          let nearest = enemies[0]
+          let nearestIdx = 0
           let minDist = Vector3.Distance(
             towers[i].position,
-            enemies[0].position,
+            enemies[0].mesh.position,
           )
 
-          for (const e of enemies) {
-            // const d = Vector3.Distance(towers[i].position, enemies[i].position)
-            const d = Vector3.Distance(towers[i].position, e.position)
+          for (let j = 1; j < enemies.length; j++) {
+            const d = Vector3.Distance(
+              towers[i].position,
+              enemies[j].mesh.position,
+            )
             if (d < minDist) {
               minDist = d
-              nearest = e
+              nearestIdx = j
             }
           }
-
-          const dir = nearest.position.subtract(towers[i].position)
+          const dir = enemies[nearestIdx].mesh.position.subtract(
+            towers[i].position,
+          )
           towers[i].rotation.y = Math.atan2(dir.x, dir.z)
 
           towerFireTimers[i] += delta
-          if (towerFireTimers[i] >= TOWER_FIRE_INTERVAL) {
+          if (towerFireTimers[i] >= 2.0) {
             towerFireTimers[i] = 0
             const muzzlePos = towers[i].position.clone()
             muzzlePos.y += 0.9
-            fireBullet(muzzlePos, nearest)
+            fireBullet(muzzlePos, nearestIdx, currentWave)
           }
         }
+
+        // 弾丸の衝突判定
 
         for (let bi = activeBullets.length - 1; bi >= 0; bi--) {
           const b = activeBullets[bi]
           b.timer += delta
-
-          // ターゲットが既に破棄されている場合は弾を削除
-          if (!b.target || b.target.isDisposed()) {
+          if (b.timer > 4) {
             b.agg.dispose()
             b.mesh.dispose()
             activeBullets.splice(bi, 1)
             continue
           }
 
-          const dist = Vector3.Distance(b.mesh.position, b.target.position)
+          const targetIdx = enemies.findIndex(
+            (e, idx) => idx === b.targetIndex || false,
+          )
 
-          if (dist < 0.8 || b.timer > 4) {
-            if (dist < 0.8) {
-              const ei = enemies.indexOf(b.target)
-              if (ei !== -1) killEnemy(ei)
+          // 全敵との距離チェック（ターゲットが消えた場合を考慮）
+          for (let ei = enemies.length - 1; ei >= 0; ei--) {
+            if (
+              Vector3.Distance(b.mesh.position, enemies[ei].mesh.position) < 0.6
+            ) {
+              killEnemy(ei, b.waveConfig)
+              b.agg.dispose()
+              b.mesh.dispose()
+              activeBullets.splice(bi, 1)
+              break
             }
-            b.agg.dispose()
-            b.mesh.dispose()
-            activeBullets.splice(bi, 1)
           }
         }
       })
@@ -752,7 +838,7 @@ export default function GameCanvas({
       window.removeEventListener('resize', handleResize)
       engine?.dispose()
     }
-  }, [])
+  }, [onGameEvent, controlRef])
 
   return (
     <canvas
