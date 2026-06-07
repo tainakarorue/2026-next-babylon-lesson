@@ -4,6 +4,7 @@ interface HUDProps {
   score: number
   lives: number
   wave: number
+  gold: number
   gameState: 'menu' | 'playing' | 'pause' | 'gameover'
   onStart: () => void
   onRestart: () => void
@@ -13,6 +14,7 @@ export function HUD({
   score,
   lives,
   wave,
+  gold,
   gameState,
   onStart,
   onRestart,
@@ -68,6 +70,10 @@ export function HUD({
       <div className="bg-black/50 px-4 py-2 rounded-lg">
         <span className="text-red-300 font-bold text-lg">LIVES</span>
         <span className="text-white font-bold text-2xl ml-2">{lives}</span>
+      </div>
+      <div className="bg-black/50 px-4 py-2 rounded-lg backdrop-blur-sm">
+        <span className="text-yellow-300 text-sm">GOLD</span>
+        <div className="text-white font-bold text-xl">{gold}G</div>
       </div>
     </div>
   )
