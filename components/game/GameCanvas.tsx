@@ -28,8 +28,16 @@ import {
 import { HavokPlugin } from '@babylonjs/core'
 import HavokPhysics from '@babylonjs/havok'
 import '@babylonjs/loaders/glTF'
+import { AdvancedDynamicTexture, Rectangle, Control } from '@babylonjs/gui'
 
 import type { GameEventCallback } from '@/app/game/page'
+
+interface EnemyHealthBar {
+  plane: Mesh
+  fillRect: Rectangle
+  currentHp: number
+  maxHp: number
+}
 
 interface GameCanvasProps {
   gameState: 'menu' | 'playing' | 'pause' | 'gameover'
@@ -38,6 +46,7 @@ interface GameCanvasProps {
     start: () => void
     restart: () => void
   } | null>
+  selectedTowerRef: string
 }
 
 interface WaveConfig {
@@ -87,6 +96,7 @@ export default function GameCanvas({
   gameState: externalGameState,
   onGameEvent,
   controlRef,
+  selectedTowerRef,
 }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -108,6 +118,54 @@ export default function GameCanvas({
       const scene = new Scene(engine)
       // 背景色を宇宙空間の黒に設定（r, g, b, a）
       scene.clearColor = new Color4(0.02, 0.02, 0.05, 1)
+
+      // createEnemyHealthBar 関数（scene 初期化後に定義）
+
+      function createEnemyHealthBar(
+        enemy: Mesh,
+        maxHp: number,
+      ): EnemyHealthBar {
+        const plane = MeshBuilder.CreatePlane(
+          'hpPlane',
+          {
+            width: 1.5,
+            height: 0.2,
+          },
+          scene,
+        )
+        plane.parent = enemy
+        plane.position.y = 0.9
+        plane.billboardMode = Mesh.BILLBOARDMODE_ALL
+        plane.isPickable = false
+
+        const planeUI = AdvancedDynamicTexture.CreateForMesh(plane, 256, 32)
+
+        const bg = new Rectangle()
+        bg.width = '100%'
+        bg.height = '100%'
+        bg.background = '#1a1a2e'
+        bg.thickness = 1
+        bg.color = '#444'
+        planeUI.addControl(bg)
+
+        const fill = new Rectangle()
+        fill.width = '100%'
+        fill.height = '80%'
+        fill.background = '#22c55e'
+        fill.thickness = 0
+        fill.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT
+
+        return { plane, fillRect: fill, currentHp: maxHp, maxHp }
+      }
+
+      function updateHealthBar(bar: EnemyHealthBar, hp: number): void {
+        bar.currentHp = Math.max(0, hp)
+        const pct = bar.currentHp / bar.maxHp
+        bar.fillRect.width = `${pct * 100}%`
+        if (pct > 0.5) bar.fillRect.background = '#22c55e'
+        else if (pct > 0.25) bar.fillRect.background = '#f59e0b'
+        else bar.fillRect.background = '#ef4444'
+      }
 
       // ── Physics ────────────────────────────────────────
       const havokInstance = await HavokPhysics()
@@ -675,6 +733,14 @@ export default function GameCanvas({
         // 既存の敵を全削除
         for (const e of enemies) e.mesh.dispose()
         enemies.length = 0
+
+        // 飛行中の弾丸を全削除
+        for (const b of activeBullets) {
+          b.agg.dispose()
+          b.mesh.dispose()
+        }
+        activeBullets.length = 0
+
         startWave(0)
       }
 
