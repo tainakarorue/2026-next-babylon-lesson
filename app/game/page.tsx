@@ -35,7 +35,7 @@ export default function GamePage() {
 
   const selectedTowerRef = useRef(selectedTower)
 
-  const handleTowerSlect = useCallback((id: string) => {
+  const handleTowerSelect = useCallback((id: string) => {
     setSelectedTower(id)
     selectedTowerRef.current = id
   }, [])
@@ -46,12 +46,16 @@ export default function GamePage() {
       score?: number
       lives?: number
       wave?: number
+      gold?: number
     }) => {
       if (event.type === 'SCORE_CHANGED' && event.score !== undefined)
         setScore(event.score)
 
       if (event.type === 'LIFE_CHANGED' && event.lives !== undefined)
         setLives(event.lives)
+
+      if (event.type === 'GOLD_CHANGED' && event.gold !== undefined)
+        setGold(event.gold)
 
       if (event.type === 'WAVE_STARTED' && event.wave !== undefined)
         setWave(event.wave)
@@ -81,7 +85,7 @@ export default function GamePage() {
         gameState={gameState}
         onGameEvent={handleGameEvent}
         controlRef={gameControlRef}
-        selectedTowerRef={selectedTower}
+        selectedTowerRef={selectedTowerRef}
       />
       <HUD
         score={score}
@@ -95,7 +99,7 @@ export default function GamePage() {
       {gameState === 'playing' && (
         <TowerSelector
           selectedTower={selectedTower}
-          onSelect={handleTowerSlect}
+          onSelect={handleTowerSelect}
           gold={gold}
         />
       )}
