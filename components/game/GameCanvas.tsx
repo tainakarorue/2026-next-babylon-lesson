@@ -30,6 +30,7 @@ import HavokPhysics from '@babylonjs/havok'
 import '@babylonjs/loaders/glTF'
 import { AdvancedDynamicTexture, Rectangle, Control } from '@babylonjs/gui'
 
+import { TOWER_TYPES, TowerType } from '@/components/game/TowerSelector'
 import type { GameEventCallback } from '@/app/game/page'
 
 interface EnemyHealthBar {
@@ -46,7 +47,7 @@ interface GameCanvasProps {
     start: () => void
     restart: () => void
   } | null>
-  selectedTowerRef: string
+  selectedTowerRef: MutableRefObject<string>
 }
 
 interface WaveConfig {
@@ -54,6 +55,8 @@ interface WaveConfig {
   spawnInterval: number
   enemySpeed: number
   scorePerKill: number
+  enemyHp: number
+  goldPerKill: number
 }
 
 const WAVES: WaveConfig[] = [
@@ -62,24 +65,32 @@ const WAVES: WaveConfig[] = [
     spawnInterval: 2.0,
     enemySpeed: 1.0,
     scorePerKill: 10,
+    enemyHp: 2,
+    goldPerKill: 20,
   },
   {
     enemyCount: 5,
     spawnInterval: 1.5,
     enemySpeed: 1.2,
     scorePerKill: 15,
+    enemyHp: 3,
+    goldPerKill: 25,
   },
   {
     enemyCount: 8,
     spawnInterval: 1.0,
     enemySpeed: 1.5,
     scorePerKill: 20,
+    enemyHp: 4,
+    goldPerKill: 30,
   },
   {
     enemyCount: 12,
     spawnInterval: 0.8,
     enemySpeed: 2.0,
     scorePerKill: 30,
+    enemyHp: 6,
+    goldPerKill: 40,
   },
 ]
 
@@ -154,6 +165,7 @@ export default function GameCanvas({
         fill.background = '#22c55e'
         fill.thickness = 0
         fill.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT
+        bg.addControl(fill)
 
         return { plane, fillRect: fill, currentHp: maxHp, maxHp }
       }
@@ -349,6 +361,7 @@ export default function GameCanvas({
       let playing = false
       let score = 0
       let lives = 20
+      let gold = 200
       let currentWaveIndex = 0
       let waveEnemiesRemaining = 0
       let waveEnemiesSpawned = 0
@@ -407,12 +420,6 @@ export default function GameCanvas({
       let enemyTemplate: Mesh
 
       try {
-        // const result = await SceneLoader.ImportMeshAsync(
-        //   '',
-        //   '/model/',
-        //   'enemy.glb',
-        //   scene,
-        // )
         const result = await ImportMeshAsync('/model/enemy.glb', scene, {
           meshNames: '',
         })
@@ -447,12 +454,6 @@ export default function GameCanvas({
       let towerTemplate: Mesh | null = null
 
       try {
-        // const result = await SceneLoader.ImportMeshAsync(
-        //   '',
-        //   '/model/',
-        //   'tower.glb',
-        //   scene,
-        // )
         const result = await ImportMeshAsync('/model/tower.glb', scene, {
           meshNames: '',
         })
@@ -468,34 +469,15 @@ export default function GameCanvas({
       if (cancelled) return
 
       // ── Enemies ────────────────────────────────────────
-      // const enemies: Mesh[] = []
-      // const enemyTimes: number[] = []
 
-      // function spawnEnemy(position: Vector3): void {
-      //   let mesh: Mesh
-      //   const clone = enemyTemplate.clone(`enemy_${enemies.length}`, null)
-      //   if (clone) {
-      //     mesh = clone
-      //     mesh.setEnabled(true)
-      //   } else {
-      //     mesh = MeshBuilder.CreateSphere(
-      //       `enemy_${enemies.length}`,
-      //       {
-      //         diameter: 0.8,
-      //         segments: 8,
-      //       },
-      //       scene,
-      //     )
-      //     mesh.material = enemyMat
-      //   }
-
-      //   mesh.position = position.clone()
-      //   mesh.scaling = new Vector3(0.5, 0.5, 0.5)
-      //   enemies.push(mesh)
-      //   enemyTimes.push(Math.random() * Math.PI * 2)
-      // }
-
-      const enemies: { mesh: Mesh; speed: number; time: number }[] = []
+      const enemies: {
+        mesh: Mesh
+        speed: number
+        time: number
+        hp: number
+        maxHp: number
+        healthBar: EnemyHealthBar
+      }[] = []
 
       function spawnEnemy(waveConfig: WaveConfig): void {
         const spawnPoint =
@@ -513,35 +495,38 @@ export default function GameCanvas({
         mesh.position = spawnPoint.clone()
         mesh.material = enemyMat
 
+        const healthBar = createEnemyHealthBar(mesh, waveConfig.enemyHp)
+
         enemies.push({
           mesh,
           speed: waveConfig.enemySpeed,
           time: Math.random() * Math.PI * 2,
+          hp: waveConfig.enemyHp,
+          maxHp: waveConfig.enemyHp,
+          healthBar,
         })
 
         waveEnemiesSpawned++
         waveEnemiesRemaining++
       }
 
-      // function killEnemy(index: number): void {
-      //   createExplosion(enemies[index].position.clone())
-      //   enemies[index].dispose()
-      //   enemies.splice(index, 1)
-      //   enemyTimes.splice(index, 1)
-      // }
-
       function killEnemy(index: number, fromWave: WaveConfig): void {
         createExplosion(enemies[index].mesh.position.clone())
 
+        enemies[index].healthBar.plane.dispose()
         enemies[index].mesh.dispose()
         enemies.splice(index, 1)
         waveEnemiesRemaining--
         score += fromWave.scorePerKill
+        gold += fromWave.goldPerKill
         onGameEvent({ type: 'SCORE_CHANGED', score })
+        onGameEvent({ type: 'GOLD_CHANGED', gold })
       }
 
       function enemyReachsBase(index: number): void {
         createExplosion(enemies[index].mesh.position.clone())
+
+        enemies[index].healthBar.plane.dispose()
         enemies[index].mesh.dispose()
         enemies.splice(index, 1)
         waveEnemiesRemaining--
@@ -553,13 +538,10 @@ export default function GameCanvas({
         }
       }
 
-      // spawnEnemy(new Vector3(5, 0.5, 5))
-      // spawnEnemy(new Vector3(-3, 0.5, 4))
-      // spawnEnemy(new Vector3(2, 0.5, -6))
-
       // ── Tower Placement System ────────────────────────────
       const towers: Mesh[] = []
       const towerFireTimers: number[] = []
+      const towerConfigs: TowerType[] = []
 
       // ── Tower Spawn Animation ──────────────────────────
       function playSpawnAnimation(mesh: Mesh): void {
@@ -584,6 +566,8 @@ export default function GameCanvas({
       }
 
       function placeTower(position: Vector3): void {
+        if (!playing) return
+
         // グリッドにスナップ（1 マス = 1 ユニット）
         const gridX = Math.round(position.x)
         const gridZ = Math.round(position.z)
@@ -599,6 +583,15 @@ export default function GameCanvas({
 
         // 床の範囲外ならスキップ（床は -10〜10 の範囲）
         if (Math.abs(gridX) > 9 || Math.abs(gridZ) > 9) return
+        if (Math.abs(gridX) < 1 && Math.abs(gridZ) < 1) return
+
+        const towerType =
+          TOWER_TYPES.find((t) => t.id === selectedTowerRef.current) ??
+          TOWER_TYPES[0]
+
+        if (gold < towerType.cost) return
+        gold -= towerType.cost
+        onGameEvent({ type: 'GOLD_CHANGED', gold })
 
         let base: Mesh
         if (towerTemplate) {
@@ -661,6 +654,7 @@ export default function GameCanvas({
 
         towers.push(base)
         towerFireTimers.push(0)
+        towerConfigs.push(towerType)
         playSpawnAnimation(base)
       }
 
@@ -671,12 +665,14 @@ export default function GameCanvas({
         targetIndex: number
         timer: number
         waveConfig: WaveConfig
+        damage: number
       }[] = []
 
       function fireBullet(
         from: Vector3,
         targetIndex: number,
         waveConfig: WaveConfig,
+        damage: number,
       ): void {
         if (targetIndex < 0 || targetIndex >= enemies.length) return
 
@@ -712,6 +708,7 @@ export default function GameCanvas({
           targetIndex,
           timer: 0,
           waveConfig,
+          damage,
         })
       }
 
@@ -728,10 +725,14 @@ export default function GameCanvas({
         playing = true
         score = 0
         lives = 20
+        gold = 200
         currentWaveIndex = 0
         betweenWaveTimer = 0
         // 既存の敵を全削除
-        for (const e of enemies) e.mesh.dispose()
+        for (const e of enemies) {
+          e.healthBar.plane.dispose()
+          e.mesh.dispose()
+        }
         enemies.length = 0
 
         // 飛行中の弾丸を全削除
@@ -740,6 +741,10 @@ export default function GameCanvas({
           b.mesh.dispose()
         }
         activeBullets.length = 0
+        onGameEvent({
+          type: 'GOLD_CHANGED',
+          gold,
+        })
 
         startWave(0)
       }
@@ -749,6 +754,7 @@ export default function GameCanvas({
         for (const t of towers) t.dispose()
         towers.length = 0
         towerFireTimers.length = 0
+        towerConfigs.length = 0
         startGame()
       }
 
@@ -846,12 +852,18 @@ export default function GameCanvas({
           )
           towers[i].rotation.y = Math.atan2(dir.x, dir.z)
 
+          const towerConfig = towerConfigs[i]
+
           towerFireTimers[i] += delta
-          if (towerFireTimers[i] >= 2.0) {
+
+          if (
+            towerFireTimers[i] >= towerConfig.fireRate &&
+            minDist <= towerConfig.range
+          ) {
             towerFireTimers[i] = 0
             const muzzlePos = towers[i].position.clone()
             muzzlePos.y += 0.9
-            fireBullet(muzzlePos, nearestIdx, currentWave)
+            fireBullet(muzzlePos, nearestIdx, currentWave, towerConfig.damage)
           }
         }
 
@@ -867,16 +879,18 @@ export default function GameCanvas({
             continue
           }
 
-          const targetIdx = enemies.findIndex(
-            (e, idx) => idx === b.targetIndex || false,
-          )
-
           // 全敵との距離チェック（ターゲットが消えた場合を考慮）
           for (let ei = enemies.length - 1; ei >= 0; ei--) {
             if (
               Vector3.Distance(b.mesh.position, enemies[ei].mesh.position) < 0.6
             ) {
-              killEnemy(ei, b.waveConfig)
+              enemies[ei].hp -= b.damage
+              updateHealthBar(enemies[ei].healthBar, enemies[ei].hp)
+
+              if (enemies[ei].hp <= 0) {
+                killEnemy(ei, b.waveConfig)
+              }
+
               b.agg.dispose()
               b.mesh.dispose()
               activeBullets.splice(bi, 1)
