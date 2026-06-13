@@ -24,6 +24,9 @@ import {
   ParticleSystem,
   GPUParticleSystem,
   DynamicTexture,
+  DefaultRenderingPipeline,
+  ImageProcessingConfiguration,
+  ColorCurves,
 } from '@babylonjs/core'
 import { HavokPlugin } from '@babylonjs/core'
 import HavokPhysics from '@babylonjs/havok'
@@ -205,6 +208,41 @@ export default function GameCanvas({
       camera.upperRadiusLimit = 40
       camera.lowerBetaLimit = 0.1
       camera.upperBetaLimit = Math.PI / 2.2
+
+      // ── Post-Processing Pipeline ───────────────────────
+      const pipeline = new DefaultRenderingPipeline('default', true, scene, [
+        camera,
+      ])
+
+      pipeline.fxaaEnabled = true
+
+      pipeline.bloomEnabled = true
+      pipeline.bloomWeight = 0.4
+      pipeline.bloomThreshold = 0.7
+      pipeline.bloomScale = 0.5
+      pipeline.bloomKernel = 32
+
+      pipeline.imageProcessingEnabled = true
+      pipeline.imageProcessing.contrast = 1.1
+      pipeline.imageProcessing.exposure = 1.0
+      pipeline.imageProcessing.toneMappingEnabled = true
+      pipeline.imageProcessing.toneMappingType =
+        ImageProcessingConfiguration.TONEMAPPING_ACES
+
+      pipeline.imageProcessing.colorCurvesEnabled = true
+
+      const curves = new ColorCurves()
+      curves.globalSaturation = 15
+      curves.highlightsHue = 210
+      curves.highlightsDensity = 20
+      pipeline.imageProcessing.colorCurves = curves
+
+      pipeline.chromaticAberrationEnabled = true
+      pipeline.chromaticAberration.aberrationAmount = 20
+
+      pipeline.grainEnabled = true
+      pipeline.grain.intensity = 8
+      pipeline.grain.animated = true
 
       // ── Lights ───────────────────────────────────────────
       // 環境光（上から青白く、下からは暗く）
@@ -629,6 +667,18 @@ export default function GameCanvas({
           base.position = new Vector3(gridX, 0.15, gridZ)
           base.material = towerBaseMat
 
+          const type = selectedTowerRef.current
+
+          const bMat = barrelMat.clone(`barrelMat_${type}`)
+          if (type === 'rapid') {
+            bMat.emissiveColor = new Color3(0, 1, 0.3)
+            bMat.albedoColor = new Color3(0, 0.5, 0.2)
+          }
+          if (type === 'sniper') {
+            bMat.emissiveColor = new Color3(0.8, 0, 1)
+            bMat.albedoColor = new Color3(0.4, 0, 0.6)
+          }
+
           const barrel = MeshBuilder.CreateCylinder(
             `towerBarrel_${towers.length}`,
             {
@@ -640,7 +690,7 @@ export default function GameCanvas({
           )
           barrel.parent = base
           barrel.position = new Vector3(0, 0.9, 0)
-          barrel.material = barrelMat
+          barrel.material = bMat
         }
 
         // new PhysicsAggregate(
@@ -741,6 +791,9 @@ export default function GameCanvas({
           b.mesh.dispose()
         }
         activeBullets.length = 0
+
+        onGameEvent({ type: 'SCORE_CHANGED', score })
+        onGameEvent({ type: 'LIFE_CHANGED', lives })
         onGameEvent({
           type: 'GOLD_CHANGED',
           gold,

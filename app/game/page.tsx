@@ -76,7 +76,7 @@ export default function GamePage() {
     setWave(1)
     setGold(200)
     setGameState('playing')
-    gameControlRef.current?.start()
+    gameControlRef.current?.restart()
   }, [])
 
   return (
