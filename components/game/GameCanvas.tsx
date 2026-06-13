@@ -27,6 +27,8 @@ import {
   DefaultRenderingPipeline,
   ImageProcessingConfiguration,
   ColorCurves,
+  ShadowGenerator,
+  CubeTexture,
 } from '@babylonjs/core'
 import { HavokPlugin } from '@babylonjs/core'
 import HavokPhysics from '@babylonjs/havok'
@@ -264,8 +266,36 @@ export default function GameCanvas({
         scene,
       )
 
-      sunLight.intensity = 0.8
+      // sunLight.intensity = 0.8
+      sunLight.intensity = 1.2
       sunLight.diffuse = new Color3(1.0, 0.95, 0.8)
+      sunLight.position = new Vector3(10, 20, 10)
+      // シャドウ計算のための位置
+      sunLight.shadowMinZ = 0.1
+      sunLight.shadowMaxZ = 60
+
+      // ── Environment Texture（IBL）─────────────────────
+      try {
+        scene.environmentTexture = CubeTexture.CreateFromPrefilteredData(
+          '/env/environment.env',
+          scene,
+        )
+        scene.environmentIntensity = 0.5
+        // スカイボックスは使わない（宇宙は漆黒なので clearColor で代替）
+        // scene.createDefaultSkybox(scene.environmentTexture, true, 500)
+      } catch (e) {
+        // .env ファイルがない場合は何もしない（HemisphericLight が代替する）
+        console.warn(
+          'environment.envが見つかりません。HemisphericLightで代替します。',
+          e,
+        )
+      }
+
+      // ── Shadow Generator ───────────────────────────────
+      const shadowGen = new ShadowGenerator(1024, sunLight)
+      shadowGen.useExponentialShadowMap = false
+      shadowGen.usePoissonSampling = true
+      shadowGen.bias = 0.0001
 
       // ── Meshes ───────────────────────────────────────────
       // 宇宙ステーションの床
@@ -286,6 +316,7 @@ export default function GameCanvas({
       groundMat.metallic = 0.8
       groundMat.roughness = 0.5
       ground.material = groundMat
+      ground.receiveShadows = true
 
       // ── Physics Bodies ─────────────────────────────────
       // 床は静的ボディ（mass: 0）
@@ -312,6 +343,14 @@ export default function GameCanvas({
       barrelMat.roughness = 0.1
       barrelMat.emissiveColor = new Color3(0, 0.5, 1.0)
       barrelMat.emissiveIntensity = 1.5
+
+      const barrelMatRapid = barrelMat.clone('barrelMatRapid')
+      barrelMatRapid.emissiveColor = new Color3(0, 1, 0.3)
+      barrelMatRapid.albedoColor = new Color3(0, 0.5, 0.2)
+
+      const barrelMatSniper = barrelMat.clone('barrelMatSniper')
+      barrelMatSniper.emissiveColor = new Color3(0.8, 0, 1)
+      barrelMatSniper.albedoColor = new Color3(0.4, 0, 0.6)
 
       // 敵（赤い宇宙船）
       const enemyMat = new StandardMaterial('enemyMat', scene)
@@ -344,6 +383,8 @@ export default function GameCanvas({
       base.position = BASE_POSITION.clone()
       base.position.y = 0.15
       base.material = baseMat
+      base.receiveShadows = true
+      shadowGen.addShadowCaster(base)
       new PhysicsAggregate(base, PhysicsShapeType.CYLINDER, { mass: 0 }, scene)
 
       // ── Particle Texture ────────────────────────────────
@@ -532,6 +573,8 @@ export default function GameCanvas({
 
         mesh.position = spawnPoint.clone()
         mesh.material = enemyMat
+        mesh.receiveShadows = true
+        shadowGen.addShadowCaster(mesh)
 
         const healthBar = createEnemyHealthBar(mesh, waveConfig.enemyHp)
 
@@ -668,16 +711,9 @@ export default function GameCanvas({
           base.material = towerBaseMat
 
           const type = selectedTowerRef.current
-
-          const bMat = barrelMat.clone(`barrelMat_${type}`)
-          if (type === 'rapid') {
-            bMat.emissiveColor = new Color3(0, 1, 0.3)
-            bMat.albedoColor = new Color3(0, 0.5, 0.2)
-          }
-          if (type === 'sniper') {
-            bMat.emissiveColor = new Color3(0.8, 0, 1)
-            bMat.albedoColor = new Color3(0.4, 0, 0.6)
-          }
+          let bMat = barrelMat
+          if (type === 'rapid') bMat = barrelMatRapid
+          if (type === 'sniper') bMat = barrelMatSniper
 
           const barrel = MeshBuilder.CreateCylinder(
             `towerBarrel_${towers.length}`,
@@ -691,6 +727,9 @@ export default function GameCanvas({
           barrel.parent = base
           barrel.position = new Vector3(0, 0.9, 0)
           barrel.material = bMat
+
+          base.receiveShadows = true
+          shadowGen.addShadowCaster(base, true)
         }
 
         // new PhysicsAggregate(
