@@ -33,8 +33,8 @@ import { ShadowGenerator } from '@babylonjs/core'
 
 // DirectionalLight または SpotLight にアタッチ
 const shadowGenerator = new ShadowGenerator(
-  1024,        // シャドウマップの解像度（512/1024/2048/4096）
-  sunLight     // 光源
+  1024, // シャドウマップの解像度（512/1024/2048/4096）
+  sunLight, // 光源
 )
 
 // 影を落とすオブジェクトを登録
@@ -65,12 +65,12 @@ shadowGenerator.filteringQuality = ShadowGenerator.QUALITY_HIGH
 
 ### シャドウマップの解像度とパフォーマンス
 
-| 解像度 | 品質 | GPU 負荷 |
-|---|---|---|
-| 512 | 低い（影がドット状） | 非常に軽い |
-| 1024 | 標準 | 軽い（推奨） |
-| 2048 | 高い | 普通 |
-| 4096 | 非常に高い | 重い |
+| 解像度 | 品質                 | GPU 負荷     |
+| ------ | -------------------- | ------------ |
+| 512    | 低い（影がドット状） | 非常に軽い   |
+| 1024   | 標準                 | 軽い（推奨） |
+| 2048   | 高い                 | 普通         |
+| 4096   | 非常に高い           | 重い         |
 
 ### IBL（Image-Based Lighting）
 
@@ -79,7 +79,10 @@ import { CubeTexture } from '@babylonjs/core'
 
 // .env ファイル（Babylon.js 独自フォーマット）
 // Babylon.js Playground の IBL Texture Viewer で作成できる
-scene.environmentTexture = CubeTexture.CreateFromPrefilteredData('/env/space.env', scene)
+scene.environmentTexture = CubeTexture.CreateFromPrefilteredData(
+  '/env/space.env',
+  scene,
+)
 
 // 環境光の強さ
 scene.environmentIntensity = 1.0
@@ -106,7 +109,7 @@ import { CascadedShadowGenerator } from '@babylonjs/core'
 // 遠くまで高品質な影を出すための複数カスケード
 const csmGenerator = new CascadedShadowGenerator(1024, sunLight)
 csmGenerator.numCascades = 4
-csmGenerator.shadowMaxZ = 100  // 影が出る最大距離
+csmGenerator.shadowMaxZ = 100 // 影が出る最大距離
 ```
 
 ---
@@ -116,7 +119,11 @@ csmGenerator.shadowMaxZ = 100  // 影が出る最大距離
 ### Step 1: DirectionalLight を影生成用に設定する
 
 ```typescript
-const sunLight = new DirectionalLight('sunLight', new Vector3(-1, -2, -1), scene)
+const sunLight = new DirectionalLight(
+  'sunLight',
+  new Vector3(-1, -2, -1),
+  scene,
+)
 sunLight.intensity = 0.8
 sunLight.diffuse = new Color3(1.0, 0.95, 0.8)
 
@@ -148,7 +155,10 @@ ground.receiveShadows = true
 ```typescript
 // .env ファイルがある場合
 try {
-  scene.environmentTexture = CubeTexture.CreateFromPrefilteredData('/env/environment.env', scene)
+  scene.environmentTexture = CubeTexture.CreateFromPrefilteredData(
+    '/env/environment.env',
+    scene,
+  )
   scene.environmentIntensity = 0.5
 } catch {
   // ファイルがなければ HemisphericLight だけで対応
@@ -160,10 +170,12 @@ try {
 ## ポイント解説
 
 ### `addShadowCaster(mesh, true)` の第 2 引数
+
 `true` にすると子メッシュ（砲身など）も含めて影を落とすようになる。  
 `false`（デフォルト）は指定したメッシュのみ。
 
 ### 影のちらつき（Shadow Acne）対策
+
 影が縞模様になるアーティファクト。`shadowGenerator.bias` で調整する。
 
 ```typescript
@@ -173,6 +185,7 @@ shadowGenerator.normalBias = 0.02
 ```
 
 ### 動的オブジェクトへの対応
+
 敵のように毎フレーム位置が変わるオブジェクトも `addShadowCaster` できる。  
 ただし影の再計算コストが高いので、数が多い場合は `shadowGenerator.getShadowMap().refreshRate` を調整する。
 
@@ -222,15 +235,42 @@ import type { GameEventCallback } from '@/app/game/page'
 interface GameCanvasProps {
   gameState: 'menu' | 'playing' | 'paused' | 'gameover'
   onGameEvent: GameEventCallback
-  controlRef: MutableRefObject<{ start: () => void; restart: () => void } | null>
+  controlRef: MutableRefObject<{
+    start: () => void
+    restart: () => void
+  } | null>
   selectedTowerRef: MutableRefObject<string>
 }
 
 const WAVES = [
-  { enemyCount: 3,  spawnInterval: 2.0, enemySpeed: 1.0, scorePerKill: 10, enemyHp: 3 },
-  { enemyCount: 5,  spawnInterval: 1.5, enemySpeed: 1.2, scorePerKill: 15, enemyHp: 5 },
-  { enemyCount: 8,  spawnInterval: 1.0, enemySpeed: 1.5, scorePerKill: 20, enemyHp: 7 },
-  { enemyCount: 12, spawnInterval: 0.8, enemySpeed: 2.0, scorePerKill: 30, enemyHp: 10 },
+  {
+    enemyCount: 3,
+    spawnInterval: 2.0,
+    enemySpeed: 1.0,
+    scorePerKill: 10,
+    enemyHp: 3,
+  },
+  {
+    enemyCount: 5,
+    spawnInterval: 1.5,
+    enemySpeed: 1.2,
+    scorePerKill: 15,
+    enemyHp: 5,
+  },
+  {
+    enemyCount: 8,
+    spawnInterval: 1.0,
+    enemySpeed: 1.5,
+    scorePerKill: 20,
+    enemyHp: 7,
+  },
+  {
+    enemyCount: 12,
+    spawnInterval: 0.8,
+    enemySpeed: 2.0,
+    scorePerKill: 30,
+    enemyHp: 10,
+  },
 ]
 
 const SPAWN_POINTS = [
@@ -251,7 +291,11 @@ interface EnemyData {
   hpBarFill: Rectangle
 }
 
-export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }: GameCanvasProps) {
+export default function GameCanvas({
+  onGameEvent,
+  controlRef,
+  selectedTowerRef,
+}: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -265,10 +309,20 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
 
       // ── Physics ────────────────────────────────────────
       const havokInstance = await HavokPhysics()
-      scene.enablePhysics(new Vector3(0, -9.81, 0), new HavokPlugin(true, havokInstance))
+      scene.enablePhysics(
+        new Vector3(0, -9.81, 0),
+        new HavokPlugin(true, havokInstance),
+      )
 
       // ── Camera ─────────────────────────────────────────
-      const camera = new ArcRotateCamera('camera', -Math.PI / 2, Math.PI / 3, 20, Vector3.Zero(), scene)
+      const camera = new ArcRotateCamera(
+        'camera',
+        -Math.PI / 2,
+        Math.PI / 3,
+        20,
+        Vector3.Zero(),
+        scene,
+      )
       camera.attachControl(canvasRef.current!, true)
       camera.lowerRadiusLimit = 5
       camera.upperRadiusLimit = 40
@@ -276,7 +330,9 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
       camera.upperBetaLimit = Math.PI / 2.2
 
       // ── Post-Processing ────────────────────────────────
-      const pipeline = new DefaultRenderingPipeline('default', true, scene, [camera])
+      const pipeline = new DefaultRenderingPipeline('default', true, scene, [
+        camera,
+      ])
       pipeline.fxaaEnabled = true
       pipeline.bloomEnabled = true
       pipeline.bloomWeight = 0.4
@@ -287,7 +343,8 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
       pipeline.imageProcessing.contrast = 1.1
       pipeline.imageProcessing.exposure = 1.0
       pipeline.imageProcessing.toneMappingEnabled = true
-      pipeline.imageProcessing.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES
+      pipeline.imageProcessing.toneMappingType =
+        ImageProcessingConfiguration.TONEMAPPING_ACES
       pipeline.imageProcessing.colorCurvesEnabled = true
       const curves = new ColorCurves()
       curves.globalSaturation = 15
@@ -303,7 +360,11 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
       hLight.diffuse = new Color3(0.6, 0.7, 1.0)
       hLight.groundColor = new Color3(0.05, 0.05, 0.1)
 
-      const sunLight = new DirectionalLight('sunLight', new Vector3(-1, -2, -1), scene)
+      const sunLight = new DirectionalLight(
+        'sunLight',
+        new Vector3(-1, -2, -1),
+        scene,
+      )
       sunLight.intensity = 1.0
       sunLight.diffuse = new Color3(1.0, 0.95, 0.8)
       sunLight.position = new Vector3(10, 20, 10) // シャドウ計算のための位置
@@ -313,7 +374,8 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
       // ── Environment Texture（IBL）─────────────────────
       try {
         scene.environmentTexture = CubeTexture.CreateFromPrefilteredData(
-          '/env/environment.env', scene
+          '/env/environment.env',
+          scene,
         )
         scene.environmentIntensity = 0.5
         // スカイボックスは使わない（宇宙は漆黒なので clearColor で代替）
@@ -327,7 +389,11 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
       shadowGen.bias = 0.0001
 
       // ── Ground ─────────────────────────────────────────
-      const ground = MeshBuilder.CreateGround('ground', { width: 20, height: 20, subdivisions: 1 }, scene)
+      const ground = MeshBuilder.CreateGround(
+        'ground',
+        { width: 20, height: 20, subdivisions: 1 },
+        scene,
+      )
       const groundMat = new PBRMaterial('groundMat', scene)
       groundMat.albedoColor = new Color3(0.15, 0.15, 0.2)
       groundMat.metallic = 0.8
@@ -368,7 +434,11 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
       baseMat.roughness = 0.3
 
       // ── Base ───────────────────────────────────────────
-      const base = MeshBuilder.CreateCylinder('base', { height: 0.3, diameter: 2, tessellation: 16 }, scene)
+      const base = MeshBuilder.CreateCylinder(
+        'base',
+        { height: 0.3, diameter: 2, tessellation: 16 },
+        scene,
+      )
       base.position.y = 0.15
       base.material = baseMat
       base.receiveShadows = true
@@ -420,23 +490,38 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
 
       // ── Health Bar ─────────────────────────────────────
       function createHealthBar(enemy: Mesh): Rectangle {
-        const plane = MeshBuilder.CreatePlane('hpPlane', { width: 1.5, height: 0.2 }, scene)
+        const plane = MeshBuilder.CreatePlane(
+          'hpPlane',
+          { width: 1.5, height: 0.2 },
+          scene,
+        )
         plane.parent = enemy
         plane.position.y = 0.9
         plane.billboardMode = Mesh.BILLBOARDMODE_ALL
         plane.isPickable = false
         const ui = AdvancedDynamicTexture.CreateForMesh(plane, 256, 32)
         const bg = new Rectangle()
-        bg.width = '100%'; bg.height = '100%'; bg.background = '#1a1a2e'; bg.thickness = 1; bg.color = '#444'
+        bg.width = '100%'
+        bg.height = '100%'
+        bg.background = '#1a1a2e'
+        bg.thickness = 1
+        bg.color = '#444'
         ui.addControl(bg)
         const fill = new Rectangle()
-        fill.width = '100%'; fill.height = '80%'; fill.background = '#22c55e'; fill.thickness = 0
+        fill.width = '100%'
+        fill.height = '80%'
+        fill.background = '#22c55e'
+        fill.thickness = 0
         fill.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT
         bg.addControl(fill)
         return fill
       }
 
-      function updateHealthBar(fill: Rectangle, hp: number, maxHp: number): void {
+      function updateHealthBar(
+        fill: Rectangle,
+        hp: number,
+        maxHp: number,
+      ): void {
         const pct = Math.max(0, hp) / maxHp
         fill.width = `${pct * 100}%`
         if (pct > 0.5) fill.background = '#22c55e'
@@ -456,19 +541,30 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
       let betweenWaveTimer = 0
       const BETWEEN_WAVE_DELAY = 5
 
-      function spawnEnemy(waveConfig: typeof WAVES[0]): void {
+      function spawnEnemy(waveConfig: (typeof WAVES)[0]): void {
         const sp = SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)]
-        const mesh = MeshBuilder.CreateSphere(`enemy_${Date.now()}`, { diameter: 0.8, segments: 8 }, scene)
+        const mesh = MeshBuilder.CreateSphere(
+          `enemy_${Date.now()}`,
+          { diameter: 0.8, segments: 8 },
+          scene,
+        )
         mesh.position = sp.clone()
         mesh.material = enemyMat
         mesh.receiveShadows = true
         shadowGen.addShadowCaster(mesh)
         const fill = createHealthBar(mesh)
-        enemies.push({ mesh, speed: waveConfig.enemySpeed, time: Math.random() * Math.PI * 2, hp: waveConfig.enemyHp, maxHp: waveConfig.enemyHp, hpBarFill: fill })
+        enemies.push({
+          mesh,
+          speed: waveConfig.enemySpeed,
+          time: Math.random() * Math.PI * 2,
+          hp: waveConfig.enemyHp,
+          maxHp: waveConfig.enemyHp,
+          hpBarFill: fill,
+        })
         waveEnemiesSpawned++
       }
 
-      function killEnemy(index: number, waveConfig: typeof WAVES[0]): void {
+      function killEnemy(index: number, waveConfig: (typeof WAVES)[0]): void {
         createExplosion(enemies[index].mesh.position.clone())
         enemies[index].mesh.dispose()
         enemies.splice(index, 1)
@@ -484,19 +580,28 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
         enemies.splice(index, 1)
         lives -= 1
         onGameEvent({ type: 'LIFE_CHANGED', lives })
-        if (lives <= 0) { playing = false; onGameEvent({ type: 'GAME_OVER', score }) }
+        if (lives <= 0) {
+          playing = false
+          onGameEvent({ type: 'GAME_OVER', score })
+        }
       }
 
       const towers: Mesh[] = []
       const towerFireTimers: number[] = []
 
       function playSpawnAnimation(mesh: Mesh): void {
-        const anim = new Animation('spawnScale', 'scaling', 60, Animation.ANIMATIONTYPE_VECTOR3, Animation.ANIMATIONLOOPMODE_ONCE)
+        const anim = new Animation(
+          'spawnScale',
+          'scaling',
+          60,
+          Animation.ANIMATIONTYPE_VECTOR3,
+          Animation.ANIMATIONLOOPMODE_ONCE,
+        )
         const ease = new BackEase(0.5)
         ease.setEasingMode(EasingFunction.EASINGMODE_EASEOUT)
         anim.setEasingFunction(ease)
         anim.setKeys([
-          { frame: 0,  value: new Vector3(0.01, 0.01, 0.01) },
+          { frame: 0, value: new Vector3(0.01, 0.01, 0.01) },
           { frame: 20, value: new Vector3(1.1, 1.1, 1.1) },
           { frame: 25, value: new Vector3(1, 1, 1) },
         ])
@@ -506,31 +611,61 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
 
       function placeTower(position: Vector3): void {
         if (!playing) return
-        const TOWER_COSTS: Record<string, number> = { basic: 50, rapid: 80, sniper: 120 }
+        const TOWER_COSTS: Record<string, number> = {
+          basic: 50,
+          rapid: 80,
+          sniper: 120,
+        }
         const type = selectedTowerRef.current
         const cost = TOWER_COSTS[type] ?? 50
         if (gold < cost) return
         const gridX = Math.round(position.x)
         const gridZ = Math.round(position.z)
-        if (towers.some((t) => Math.round(t.position.x) === gridX && Math.round(t.position.z) === gridZ)) return
+        if (
+          towers.some(
+            (t) =>
+              Math.round(t.position.x) === gridX &&
+              Math.round(t.position.z) === gridZ,
+          )
+        )
+          return
         if (Math.abs(gridX) > 9 || Math.abs(gridZ) > 9) return
         if (Math.abs(gridX) < 1 && Math.abs(gridZ) < 1) return
 
         gold -= cost
         onGameEvent({ type: 'GOLD_CHANGED', gold })
 
-        const towerBase = MeshBuilder.CreateBox(`towerBase_${towers.length}`, { width: 1, height: 0.3, depth: 1 }, scene)
+        const towerBase = MeshBuilder.CreateBox(
+          `towerBase_${towers.length}`,
+          { width: 1, height: 0.3, depth: 1 },
+          scene,
+        )
         towerBase.position = new Vector3(gridX, 0.15, gridZ)
         towerBase.material = towerBaseMat
         towerBase.receiveShadows = true
         shadowGen.addShadowCaster(towerBase, true)
-        new PhysicsAggregate(towerBase, PhysicsShapeType.BOX, { mass: 0 }, scene)
+        new PhysicsAggregate(
+          towerBase,
+          PhysicsShapeType.BOX,
+          { mass: 0 },
+          scene,
+        )
 
         const bMat = barrelMat.clone(`barrelMat_${type}`)
-        if (type === 'rapid')  { bMat.emissiveColor = new Color3(0, 1, 0.3); bMat.albedoColor = new Color3(0, 0.5, 0.2) }
-        if (type === 'sniper') { bMat.emissiveColor = new Color3(0.8, 0, 1); bMat.albedoColor = new Color3(0.4, 0, 0.6) }
+        if (type === 'rapid') {
+          bMat.emissiveColor = new Color3(0, 1, 0.3)
+          bMat.albedoColor = new Color3(0, 0.5, 0.2)
+        }
+        if (type === 'sniper') {
+          bMat.emissiveColor = new Color3(0.8, 0, 1)
+          bMat.albedoColor = new Color3(0.4, 0, 0.6)
+        }
 
-        const barrel = MeshBuilder.CreateCylinder(`towerBarrel_${towers.length}`, { height: 1.5, diameter: 0.3, tessellation: 8 }, scene)
+        const barrel = MeshBuilder.CreateCylinder(
+          `towerBarrel_${towers.length}`,
+          { height: 1.5, diameter: 0.3, tessellation: 8 },
+          scene,
+        )
         barrel.parent = towerBase
         barrel.position = new Vector3(0, 0.9, 0)
         barrel.material = bMat
@@ -540,27 +675,50 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
         playSpawnAnimation(towerBase)
       }
 
-      const activeBullets: { mesh: Mesh; agg: PhysicsAggregate; timer: number; waveIdx: number }[] = []
+      const activeBullets: {
+        mesh: Mesh
+        agg: PhysicsAggregate
+        timer: number
+        waveIdx: number
+      }[] = []
 
-      function fireBullet(from: Vector3, nearestIdx: number, waveIdx: number): void {
+      function fireBullet(
+        from: Vector3,
+        nearestIdx: number,
+        waveIdx: number,
+      ): void {
         if (nearestIdx < 0 || nearestIdx >= enemies.length) return
-        const bullet = MeshBuilder.CreateSphere('bullet', { diameter: 0.2, segments: 4 }, scene)
+        const bullet = MeshBuilder.CreateSphere(
+          'bullet',
+          { diameter: 0.2, segments: 4 },
+          scene,
+        )
         bullet.position = from.clone()
         bullet.material = bulletMat
-        const agg = new PhysicsAggregate(bullet, PhysicsShapeType.SPHERE, { mass: 0.05 }, scene)
+        const agg = new PhysicsAggregate(
+          bullet,
+          PhysicsShapeType.SPHERE,
+          { mass: 0.05 },
+          scene,
+        )
         const dir = enemies[nearestIdx].mesh.position.subtract(from).normalize()
         agg.body.setLinearVelocity(dir.scale(15))
         activeBullets.push({ mesh: bullet, agg, timer: 0, waveIdx })
       }
 
       function startWave(idx: number): void {
-        waveEnemiesSpawned = 0; spawnTimer = 0
+        waveEnemiesSpawned = 0
+        spawnTimer = 0
         onGameEvent({ type: 'WAVE_STARTED', wave: idx + 1 })
       }
 
       function startGame(): void {
-        playing = true; score = 0; lives = 20; gold = 200
-        currentWaveIndex = 0; betweenWaveTimer = 0
+        playing = true
+        score = 0
+        lives = 20
+        gold = 200
+        currentWaveIndex = 0
+        betweenWaveTimer = 0
         for (const e of enemies) e.mesh.dispose()
         enemies.length = 0
         onGameEvent({ type: 'SCORE_CHANGED', score })
@@ -571,7 +729,8 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
 
       function restartGame(): void {
         for (const t of towers) t.dispose()
-        towers.length = 0; towerFireTimers.length = 0
+        towers.length = 0
+        towerFireTimers.length = 0
         startGame()
       }
 
@@ -584,7 +743,11 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
         if (pick.pickedMesh.name === 'ground') placeTower(pick.pickedPoint)
       })
 
-      const FIRE_RATES: Record<string, number> = { basic: 2.0, rapid: 0.8, sniper: 4.0 }
+      const FIRE_RATES: Record<string, number> = {
+        basic: 2.0,
+        rapid: 0.8,
+        sniper: 4.0,
+      }
 
       scene.registerBeforeRender(() => {
         if (!playing) return
@@ -593,10 +756,16 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
 
         if (waveEnemiesSpawned < currentWave.enemyCount) {
           spawnTimer += delta
-          if (spawnTimer >= currentWave.spawnInterval) { spawnTimer = 0; spawnEnemy(currentWave) }
+          if (spawnTimer >= currentWave.spawnInterval) {
+            spawnTimer = 0
+            spawnEnemy(currentWave)
+          }
         }
 
-        if (waveEnemiesSpawned >= currentWave.enemyCount && enemies.length === 0) {
+        if (
+          waveEnemiesSpawned >= currentWave.enemyCount &&
+          enemies.length === 0
+        ) {
           betweenWaveTimer += delta
           if (betweenWaveTimer >= BETWEEN_WAVE_DELAY) {
             betweenWaveTimer = 0
@@ -609,7 +778,10 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
           const e = enemies[i]
           e.time += delta
           const dir = BASE_POSITION.subtract(e.mesh.position)
-          if (dir.length() < 1.0) { enemyReachesBase(i); continue }
+          if (dir.length() < 1.0) {
+            enemyReachesBase(i)
+            continue
+          }
           e.mesh.position.addInPlace(dir.normalize().scale(e.speed * delta))
           e.mesh.position.y = 0.5 + Math.sin(e.time * 2.5) * 0.15
           e.mesh.rotation.y += 0.3 * delta
@@ -618,18 +790,30 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
         for (let i = 0; i < towers.length; i++) {
           if (enemies.length === 0) continue
           let nearestIdx = 0
-          let minDist = Vector3.Distance(towers[i].position, enemies[0].mesh.position)
+          let minDist = Vector3.Distance(
+            towers[i].position,
+            enemies[0].mesh.position,
+          )
           for (let j = 1; j < enemies.length; j++) {
-            const d = Vector3.Distance(towers[i].position, enemies[j].mesh.position)
-            if (d < minDist) { minDist = d; nearestIdx = j }
+            const d = Vector3.Distance(
+              towers[i].position,
+              enemies[j].mesh.position,
+            )
+            if (d < minDist) {
+              minDist = d
+              nearestIdx = j
+            }
           }
-          const dir = enemies[nearestIdx].mesh.position.subtract(towers[i].position)
+          const dir = enemies[nearestIdx].mesh.position.subtract(
+            towers[i].position,
+          )
           towers[i].rotation.y = Math.atan2(dir.x, dir.z)
           const fireRate = FIRE_RATES['basic'] ?? 2.0
           towerFireTimers[i] += delta
           if (towerFireTimers[i] >= fireRate) {
             towerFireTimers[i] = 0
-            const muzzle = towers[i].position.clone(); muzzle.y += 0.9
+            const muzzle = towers[i].position.clone()
+            muzzle.y += 0.9
             fireBullet(muzzle, nearestIdx, currentWaveIndex)
           }
         }
@@ -637,30 +821,52 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
         for (let bi = activeBullets.length - 1; bi >= 0; bi--) {
           const b = activeBullets[bi]
           b.timer += delta
-          if (b.timer > 5) { b.agg.dispose(); b.mesh.dispose(); activeBullets.splice(bi, 1); continue }
+          if (b.timer > 5) {
+            b.agg.dispose()
+            b.mesh.dispose()
+            activeBullets.splice(bi, 1)
+            continue
+          }
           const waveConfig = WAVES[Math.min(b.waveIdx, WAVES.length - 1)]
           for (let ei = enemies.length - 1; ei >= 0; ei--) {
-            if (Vector3.Distance(b.mesh.position, enemies[ei].mesh.position) < 0.7) {
+            if (
+              Vector3.Distance(b.mesh.position, enemies[ei].mesh.position) < 0.7
+            ) {
               enemies[ei].hp -= 1
-              updateHealthBar(enemies[ei].hpBarFill, enemies[ei].hp, enemies[ei].maxHp)
+              updateHealthBar(
+                enemies[ei].hpBarFill,
+                enemies[ei].hp,
+                enemies[ei].maxHp,
+              )
               if (enemies[ei].hp <= 0) killEnemy(ei, waveConfig)
-              b.agg.dispose(); b.mesh.dispose(); activeBullets.splice(bi, 1)
+              b.agg.dispose()
+              b.mesh.dispose()
+              activeBullets.splice(bi, 1)
               break
             }
           }
         }
       })
 
-      engine.runRenderLoop(() => { scene.render() })
-      window.addEventListener('resize', () => { engine.resize() })
+      engine.runRenderLoop(() => {
+        scene.render()
+      })
+      window.addEventListener('resize', () => {
+        engine.resize()
+      })
     }
 
     init()
-    return () => { engine?.dispose() }
+    return () => {
+      engine?.dispose()
+    }
   }, [onGameEvent, controlRef, selectedTowerRef])
 
   return (
-    <canvas ref={canvasRef} style={{ width: '100%', height: '100vh', display: 'block' }} />
+    <canvas
+      ref={canvasRef}
+      style={{ width: '100%', height: '100vh', display: 'block' }}
+    />
   )
 }
 ```
@@ -673,3 +879,7 @@ export default function GameCanvas({ onGameEvent, controlRef, selectedTowerRef }
 - 影のエッジがソフトでリアルに見える（ESM）
 - PBR マテリアルが環境光を受けて滑らかに光っている（IBL がある場合）
 - 影が動く敵に追従している
+
+## hdr → env 変換ツール
+
+https://www.babylonjs.com/tools/ibl/
