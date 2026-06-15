@@ -266,7 +266,6 @@ export default function GameCanvas({
         scene,
       )
 
-      // sunLight.intensity = 0.8
       sunLight.intensity = 1.2
       sunLight.diffuse = new Color3(1.0, 0.95, 0.8)
       sunLight.position = new Vector3(10, 20, 10)
@@ -727,10 +726,10 @@ export default function GameCanvas({
           barrel.parent = base
           barrel.position = new Vector3(0, 0.9, 0)
           barrel.material = bMat
-
-          base.receiveShadows = true
-          shadowGen.addShadowCaster(base, true)
         }
+
+        base.receiveShadows = true
+        shadowGen.addShadowCaster(base, true)
 
         // new PhysicsAggregate(
         //   base,
