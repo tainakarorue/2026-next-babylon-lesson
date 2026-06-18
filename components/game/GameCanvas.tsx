@@ -14,6 +14,7 @@ import {
   Mesh,
   PBRMaterial,
   StandardMaterial,
+  ShaderMaterial,
   PointerEventTypes,
   PhysicsAggregate,
   PhysicsShapeType,
@@ -37,6 +38,7 @@ import { AdvancedDynamicTexture, Rectangle, Control } from '@babylonjs/gui'
 
 import { TOWER_TYPES, TowerType } from '@/components/game/TowerSelector'
 import type { GameEventCallback } from '@/app/game/page'
+import { registerShaders } from '@/lib/babylon/shader'
 
 interface EnemyHealthBar {
   plane: Mesh
@@ -134,6 +136,8 @@ export default function GameCanvas({
       const scene = new Scene(engine)
       // 背景色を宇宙空間の黒に設定（r, g, b, a）
       scene.clearColor = new Color4(0.02, 0.02, 0.05, 1)
+
+      registerShaders()
 
       // createEnemyHealthBar 関数（scene 初期化後に定義）
 
@@ -310,11 +314,28 @@ export default function GameCanvas({
 
       // ── Materials ────────────────────────────────────────
       // 床（暗い金属）
-      const groundMat = new PBRMaterial('groundMat', scene)
-      groundMat.albedoColor = new Color3(0.15, 0.15, 0.2)
-      groundMat.metallic = 0.8
-      groundMat.roughness = 0.5
-      ground.material = groundMat
+      // const groundMat = new PBRMaterial('groundMat', scene)
+      // groundMat.albedoColor = new Color3(0.15, 0.15, 0.2)
+      // groundMat.metallic = 0.8
+      // groundMat.roughness = 0.5
+      // ground.material = groundMat
+      // ground.receiveShadows = true
+
+      // 床（スキャンライン SF シェーダー）
+
+      const scanlineMat = new ShaderMaterial(
+        'scanlineMat',
+        scene,
+        {
+          vertex: 'scanline',
+          fragment: 'scanline',
+        },
+        {
+          attributes: ['position', 'uv'],
+          uniforms: ['worldViewProjection', 'time'],
+        },
+      )
+      ground.material = scanlineMat
       ground.receiveShadows = true
 
       // ── Physics Bodies ─────────────────────────────────
@@ -368,6 +389,30 @@ export default function GameCanvas({
       baseMat.emissiveColor = new Color3(0, 0.3, 0)
       baseMat.metallic = 0.5
       baseMat.roughness = 0.3
+
+      // シールドシェーダーマテリアル（全タワーで共有）
+
+      const shieldMat = new ShaderMaterial(
+        'shieldMat',
+        scene,
+        {
+          vertex: 'shield',
+          fragment: 'shield',
+        },
+        {
+          attributes: ['position', 'normal'],
+          uniforms: [
+            'worldViewProjection',
+            'world',
+            'cameraPosition',
+            'time',
+            'hitIntensity',
+          ],
+          needAlphaBlending: true,
+        },
+      )
+      shieldMat.backFaceCulling = false
+      shieldMat.setFloat('hitIntensity', 0)
 
       // ── Base（守るべき拠点）────────────────────────────
       const base = MeshBuilder.CreateCylinder(
@@ -622,6 +667,10 @@ export default function GameCanvas({
       const towers: Mesh[] = []
       const towerFireTimers: number[] = []
       const towerConfigs: TowerType[] = []
+      const towerShields: {
+        mesh: Mesh
+        hitIntensity: number
+      }[] = []
 
       // ── Tower Spawn Animation ──────────────────────────
       function playSpawnAnimation(mesh: Mesh): void {
@@ -740,6 +789,20 @@ export default function GameCanvas({
         //   scene,
         // )
 
+        // シールドメッシュをタワーに追加
+        const shieldMesh = MeshBuilder.CreateSphere(
+          `shield_${towers.length}`,
+          { diameter: 1.8, segments: 12 },
+          scene,
+        )
+        shieldMesh.parent = base
+        shieldMesh.position = new Vector3(0, 0.5, 0)
+        shieldMesh.material = shieldMat
+        shieldMesh.isPickable = false
+        // shieldMesh.setEnabled(false)
+        shieldMesh.setEnabled(true)
+        towerShields.push({ mesh: shieldMesh, hitIntensity: 0 })
+
         towers.push(base)
         towerFireTimers.push(0)
         towerConfigs.push(towerType)
@@ -846,6 +909,7 @@ export default function GameCanvas({
         towers.length = 0
         towerFireTimers.length = 0
         towerConfigs.length = 0
+        towerShields.length = 0
         startGame()
       }
 
@@ -868,11 +932,30 @@ export default function GameCanvas({
       })
 
       // ── Per-Frame Update ───────────────────────────────
+      let shaderTime = 0
 
       scene.registerBeforeRender(() => {
-        if (!playing) return
+        // if (!playing) return
 
         const delta = engine.getDeltaTime() / 1000
+
+        // シェーダーの time uniform を毎フレーム更新（playing に関係なく動かす）
+        shaderTime += delta
+        scanlineMat.setFloat('time', shaderTime)
+        shieldMat.setFloat('time', shaderTime)
+        shieldMat.setVector3('cameraPosition', camera.position)
+
+        // シールドのヒット強度を減衰
+        for (const shield of towerShields) {
+          if (shield.hitIntensity > 0) {
+            shield.hitIntensity = Math.max(0, shield.hitIntensity - delta * 2)
+            shieldMat.setFloat('hitIntensity', shield.hitIntensity)
+            // if (shield.hitIntensity <= 0) shield.mesh.setEnabled(false)
+          }
+        }
+
+        if (!playing) return
+
         const currentWave = WAVES[Math.min(currentWaveIndex, WAVES.length - 1)]
 
         // 敵のスポーン
