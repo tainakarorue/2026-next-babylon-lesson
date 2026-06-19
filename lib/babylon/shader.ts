@@ -17,6 +17,9 @@ export function registerShaders(): void {
     }
   `
 
+  // vec3 n = normalize(vNormal);
+  // float fresnel = pow(1.0 - max(dot(n, viewDir), 0.0), 2.0);
+
   Effect.ShadersStore['shieldFragmentShader'] = `
     precision highp float;
     varying vec3 vNormal;
