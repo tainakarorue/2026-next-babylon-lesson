@@ -670,6 +670,7 @@ export default function GameCanvas({
       const towerShields: {
         mesh: Mesh
         hitIntensity: number
+        material: ShaderMaterial
       }[] = []
 
       // ── Tower Spawn Animation ──────────────────────────
@@ -790,6 +791,9 @@ export default function GameCanvas({
         // )
 
         // シールドメッシュをタワーに追加
+        const shieldMatClone = shieldMat.clone(`shieldMat_${towers.length}`)
+        shieldMatClone.setFloat('hitIntensity', 0)
+
         const shieldMesh = MeshBuilder.CreateSphere(
           `shield_${towers.length}`,
           { diameter: 1.8, segments: 12 },
@@ -797,11 +801,15 @@ export default function GameCanvas({
         )
         shieldMesh.parent = base
         shieldMesh.position = new Vector3(0, 0.5, 0)
-        shieldMesh.material = shieldMat
+        shieldMesh.material = shieldMatClone
         shieldMesh.isPickable = false
         // shieldMesh.setEnabled(false)
         shieldMesh.setEnabled(true)
-        towerShields.push({ mesh: shieldMesh, hitIntensity: 0 })
+        towerShields.push({
+          mesh: shieldMesh,
+          hitIntensity: 0,
+          material: shieldMatClone,
+        })
 
         towers.push(base)
         towerFireTimers.push(0)
@@ -935,8 +943,6 @@ export default function GameCanvas({
       let shaderTime = 0
 
       scene.registerBeforeRender(() => {
-        // if (!playing) return
-
         const delta = engine.getDeltaTime() / 1000
 
         // シェーダーの time uniform を毎フレーム更新（playing に関係なく動かす）
@@ -949,9 +955,11 @@ export default function GameCanvas({
         for (const shield of towerShields) {
           if (shield.hitIntensity > 0) {
             shield.hitIntensity = Math.max(0, shield.hitIntensity - delta * 2)
-            shieldMat.setFloat('hitIntensity', shield.hitIntensity)
+            shield.material.setFloat('hitIntensity', shield.hitIntensity)
             // if (shield.hitIntensity <= 0) shield.mesh.setEnabled(false)
           }
+          shield.material.setFloat('time', shaderTime)
+          shield.material.setVector3('cameraPosition', camera.position)
         }
 
         if (!playing) return
