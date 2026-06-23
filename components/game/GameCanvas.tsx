@@ -791,8 +791,8 @@ export default function GameCanvas({
         // )
 
         // シールドメッシュをタワーに追加
-        const shieldMatClone = shieldMat.clone(`shieldMat_${towers.length}`)
-        shieldMatClone.setFloat('hitIntensity', 0)
+        // const shieldMatClone = shieldMat.clone(`shieldMat_${towers.length}`)
+        // shieldMatClone.setFloat('hitIntensity', 0)
 
         const shieldMesh = MeshBuilder.CreateSphere(
           `shield_${towers.length}`,
@@ -801,14 +801,20 @@ export default function GameCanvas({
         )
         shieldMesh.parent = base
         shieldMesh.position = new Vector3(0, 0.5, 0)
-        shieldMesh.material = shieldMatClone
+        const clonedShieldMat = shieldMat.clone(`shieldMat_${towers.length}`)
+        shieldMesh.material = clonedShieldMat
+        shieldMesh.onDisposeObservable.add(() => {
+          // 次回以降の配信でどちらが正しいか解説
+          clonedShieldMat.dispose()
+          // shieldMatClone.dispose()
+        })
         shieldMesh.isPickable = false
         // shieldMesh.setEnabled(false)
         shieldMesh.setEnabled(true)
         towerShields.push({
           mesh: shieldMesh,
           hitIntensity: 0,
-          material: shieldMatClone,
+          material: clonedShieldMat,
         })
 
         towers.push(base)
