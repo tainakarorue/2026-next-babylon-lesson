@@ -39,6 +39,7 @@ import { AdvancedDynamicTexture, Rectangle, Control } from '@babylonjs/gui'
 import { TOWER_TYPES, TowerType } from '@/components/game/TowerSelector'
 import type { GameEventCallback } from '@/app/game/page'
 import { registerShaders } from '@/lib/babylon/shader'
+import { SoundManager } from '@/lib/babylon/sound-manager'
 
 interface EnemyHealthBar {
   plane: Mesh
@@ -122,6 +123,7 @@ export default function GameCanvas({
     if (!canvasRef.current) return
 
     let engine: Engine
+    let soundManager: SoundManager | undefined
 
     // requestAnimationFrame エラー
     // webGLPipelineContext is null
@@ -138,6 +140,48 @@ export default function GameCanvas({
       scene.clearColor = new Color4(0.02, 0.02, 0.05, 1)
 
       registerShaders()
+
+      // ── Sound ─────────────────────────────────────────────
+
+      // soundManager = new SoundManager()
+      // await soundManager.preload(scene)
+
+      // 修正後
+      soundManager = new SoundManager()
+      soundManager.preload(scene) // await なし バックグラウンドで読み込む
+
+      if (cancelled) return
+
+      // let audioUnlocked = false
+      // scene.onPointerObservable.add(
+      //   (info) => {
+      //     if (!audioUnlocked && info.type === PointerEventTypes.POINTERDOWN) {
+      //       audioUnlocked = true
+      //       // if (engine.audioEngine) engine.audioEngine.unlock()
+
+      //       // 修正後
+      //       if (Engine.audioEngine) Engine.audioEngine.unlock()
+      //       soundManager?.playBGM()
+      //     }
+      //   },
+      //   -1,
+      //   false,
+      // )
+
+      // オーディオアンロックオブザーバー
+      let audioUnlocked = false
+      scene.onPointerObservable.add(
+        (info) => {
+          if (!audioUnlocked && info.type === PointerEventTypes.POINTERDOWN) {
+            audioUnlocked = true
+            soundManager?.unlockAsync().then(() => {
+              if (playing) soundManager?.playBGM()
+            })
+          }
+        },
+        -1,
+        false,
+      )
 
       // createEnemyHealthBar 関数（scene 初期化後に定義）
 
@@ -313,14 +357,6 @@ export default function GameCanvas({
       )
 
       // ── Materials ────────────────────────────────────────
-      // 床（暗い金属）
-      // const groundMat = new PBRMaterial('groundMat', scene)
-      // groundMat.albedoColor = new Color3(0.15, 0.15, 0.2)
-      // groundMat.metallic = 0.8
-      // groundMat.roughness = 0.5
-      // ground.material = groundMat
-      // ground.receiveShadows = true
-
       // 床（スキャンライン SF シェーダー）
 
       const scanlineMat = new ShaderMaterial(
@@ -495,6 +531,7 @@ export default function GameCanvas({
       // ── Explosion Effect ───────────────────────────────
 
       function createExplosion(position: Vector3): void {
+        soundManager?.play('explosion', 0.2)
         const ps = new ParticleSystem('explosion', 150, scene)
 
         ps.particleTexture = particleTex
@@ -723,6 +760,8 @@ export default function GameCanvas({
         gold -= towerType.cost
         onGameEvent({ type: 'GOLD_CHANGED', gold })
 
+        soundManager?.play('place')
+
         let base: Mesh
         if (towerTemplate) {
           const clone = towerTemplate.clone(`tower_${towers.length}`, null)
@@ -791,8 +830,6 @@ export default function GameCanvas({
         // )
 
         // シールドメッシュをタワーに追加
-        // const shieldMatClone = shieldMat.clone(`shieldMat_${towers.length}`)
-        // shieldMatClone.setFloat('hitIntensity', 0)
 
         const shieldMesh = MeshBuilder.CreateSphere(
           `shield_${towers.length}`,
@@ -875,6 +912,8 @@ export default function GameCanvas({
           waveConfig,
           damage,
         })
+
+        soundManager?.play('laser', 0.1)
       }
 
       // ── Game Start/Restart ─────────────────────────────
@@ -888,6 +927,9 @@ export default function GameCanvas({
 
       function startGame(): void {
         playing = true
+
+        // soundManager?.playBGM()
+
         score = 0
         lives = 20
         gold = 200
@@ -1104,6 +1146,7 @@ export default function GameCanvas({
     return () => {
       cancelled = true
       window.removeEventListener('resize', handleResize)
+      soundManager?.dispose()
       engine?.dispose()
     }
   }, [onGameEvent, controlRef])
