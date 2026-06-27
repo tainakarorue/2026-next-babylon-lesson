@@ -142,31 +142,10 @@ export default function GameCanvas({
       registerShaders()
 
       // ── Sound ─────────────────────────────────────────────
-
-      // soundManager = new SoundManager()
-      // await soundManager.preload(scene)
-
-      // 修正後
       soundManager = new SoundManager()
       soundManager.preload(scene) // await なし バックグラウンドで読み込む
 
       if (cancelled) return
-
-      // let audioUnlocked = false
-      // scene.onPointerObservable.add(
-      //   (info) => {
-      //     if (!audioUnlocked && info.type === PointerEventTypes.POINTERDOWN) {
-      //       audioUnlocked = true
-      //       // if (engine.audioEngine) engine.audioEngine.unlock()
-
-      //       // 修正後
-      //       if (Engine.audioEngine) Engine.audioEngine.unlock()
-      //       soundManager?.playBGM()
-      //     }
-      //   },
-      //   -1,
-      //   false,
-      // )
 
       // オーディオアンロックオブザーバー
       let audioUnlocked = false
