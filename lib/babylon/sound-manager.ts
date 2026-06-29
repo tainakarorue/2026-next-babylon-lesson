@@ -91,7 +91,10 @@ export class SoundManager {
     this.bgmFadeTimer = setInterval(() => {
       elapsed += step
       bgm.volume = Math.min(target, (elapsed / 2000) * target)
-      if (elapsed >= 2000 && this.bgmFadeTimer) clearInterval(this.bgmFadeTimer)
+      if (elapsed >= 2000 && this.bgmFadeTimer) {
+        clearInterval(this.bgmFadeTimer)
+        this.bgmFadeTimer = null
+      }
     }, step)
   }
 

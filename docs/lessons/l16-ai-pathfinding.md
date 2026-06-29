@@ -261,10 +261,9 @@ function placeTower(position: Vector3, gridMap: GridMap): void {
       BASE_POSITION.x,
       BASE_POSITION.z,
     )
-    if (newPath.length > 0) {
-      enemy.path = newPath
-      enemy.pathIndex = 0
-    }
+
+    enemy.path = newPath
+    enemy.pathIndex = 0
   }
 }
 ```
@@ -1333,10 +1332,12 @@ export default function GameCanvas({
               BASE_POSITION.z,
             )
             .map((p) => ({ worldX: p.wx, worldZ: p.wz }))
-          if (newPath.length > 0) {
-            enemy.path = newPath
-            enemy.pathIndex = 0
-          }
+          // if (newPath.length > 0) {
+          //   enemy.path = newPath
+          //   enemy.pathIndex = 0
+          // }
+          enemy.path = newPath
+          enemy.pathIndex = 0
         }
 
         playSpawnAnimation(base)
@@ -1548,17 +1549,18 @@ export default function GameCanvas({
             }
           } else {
             // パスなし → 直線フォールバック
-            const dir = new Vector3(
-              BASE_POSITION.x - e.mesh.position.x,
-              0,
-              BASE_POSITION.z - e.mesh.position.z,
-            )
-            const dist = dir.length()
-            if (dist < 1.0) {
-              enemyReachsBase(i)
-              continue
-            }
-            e.mesh.position.addInPlace(dir.normalize().scale(e.speed * delta))
+            // const dir = new Vector3(
+            //   BASE_POSITION.x - e.mesh.position.x,
+            //   0,
+            //   BASE_POSITION.z - e.mesh.position.z,
+            // )
+            // const dist = dir.length()
+            // if (dist < 1.0) {
+            //   enemyReachsBase(i)
+            //   continue
+            // }
+            // e.mesh.position.addInPlace(dir.normalize().scale(e.speed * delta))
+            continue
           }
 
           e.mesh.position.y = 0.5 + Math.sin(e.time * 2.5) * 0.15
