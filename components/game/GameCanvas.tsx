@@ -40,6 +40,7 @@ import { TOWER_TYPES, TowerType } from '@/components/game/TowerSelector'
 import type { GameEventCallback } from '@/app/game/page'
 import { registerShaders } from '@/lib/babylon/shader'
 import { SoundManager } from '@/lib/babylon/sound-manager'
+import { GridMap } from '@/lib/babylon/pathfinding'
 
 interface EnemyHealthBar {
   plane: Mesh
@@ -616,7 +617,11 @@ export default function GameCanvas({
         hp: number
         maxHp: number
         healthBar: EnemyHealthBar
+        path: Array<{ worldX: number; worldZ: number }>
+        pathIndex: number
       }[] = []
+
+      let gridMap = new GridMap(20)
 
       function spawnEnemy(waveConfig: WaveConfig): void {
         const spawnPoint =
@@ -638,6 +643,15 @@ export default function GameCanvas({
 
         const healthBar = createEnemyHealthBar(mesh, waveConfig.enemyHp)
 
+        const path = gridMap
+          .findPath(
+            spawnPoint.x,
+            spawnPoint.z,
+            BASE_POSITION.x,
+            BASE_POSITION.z,
+          )
+          .map((p) => ({ worldX: p.wx, worldZ: p.wz }))
+
         enemies.push({
           mesh,
           speed: waveConfig.enemySpeed,
@@ -645,6 +659,8 @@ export default function GameCanvas({
           hp: waveConfig.enemyHp,
           maxHp: waveConfig.enemyHp,
           healthBar,
+          path,
+          pathIndex: 0,
         })
 
         waveEnemiesSpawned++
@@ -836,6 +852,28 @@ export default function GameCanvas({
         towers.push(base)
         towerFireTimers.push(0)
         towerConfigs.push(towerType)
+
+        // グリッドマップを更新して全敵のパスを再計算
+        gridMap.setWalkable(gridX, gridZ, false)
+        for (const enemy of enemies) {
+          const newPath = gridMap
+            .findPath(
+              Math.round(enemy.mesh.position.x),
+              Math.round(enemy.mesh.position.z),
+              BASE_POSITION.x,
+              BASE_POSITION.z,
+            )
+            .map((p) => ({ worldX: p.wx, worldZ: p.wz }))
+
+          // if (newPath.length > 0) {
+          //   enemy.path = newPath
+          //   enemy.pathIndex = 0
+          // }
+
+          enemy.path = newPath
+          enemy.pathIndex = 0
+        }
+
         playSpawnAnimation(base)
       }
 
@@ -945,6 +983,7 @@ export default function GameCanvas({
         towerFireTimers.length = 0
         towerConfigs.length = 0
         towerShields.length = 0
+        gridMap = new GridMap(20)
         startGame()
       }
 
@@ -1020,21 +1059,63 @@ export default function GameCanvas({
           }
         }
 
+        // ここは削除
         // 敵の移動（拠点に向かって移動）
+        // for (let i = enemies.length - 1; i >= 0; i--) {
+        //   const e = enemies[i]
+        //   e.time += delta
 
+        // 敵の移動（A* ウェイポイント追跡）
         for (let i = enemies.length - 1; i >= 0; i--) {
           const e = enemies[i]
           e.time += delta
-          // 拠点方向に移動
-          const dir = BASE_POSITION.subtract(e.mesh.position)
-          const dist = dir.length()
-          if (dist < 1.0) {
-            enemyReachsBase(i)
+
+          if (e.path.length > 0 && e.pathIndex < e.path.length) {
+            const target = e.path[e.pathIndex]
+            const targetPos = new Vector3(
+              target.worldX,
+              e.mesh.position.y,
+              target.worldZ,
+            )
+            const toTarget = targetPos.subtract(e.mesh.position)
+
+            const dist = new Vector3(toTarget.x, 0, toTarget.z).length()
+
+            if (dist < 0.3) {
+              e.pathIndex++
+            } else {
+              const dir = new Vector3(toTarget.x, 0, toTarget.z).normalize()
+
+              e.mesh.position.addInPlace(dir.scale(e.speed * delta))
+              e.mesh.rotation.y = Math.atan2(dir.x, dir.z)
+            }
+
+            const distToBase = Vector3.Distance(
+              new Vector3(e.mesh.position.x, 0, e.mesh.position.z),
+              new Vector3(BASE_POSITION.x, 0, BASE_POSITION.z),
+            )
+
+            if (distToBase < 1.0) {
+              enemyReachsBase(i)
+              continue
+            }
+          } else {
+            // パスなし → 直線フォールバック
+            // const dir = new Vector3(
+            //   BASE_POSITION.x - e.mesh.position.x,
+            //   0,
+            //   BASE_POSITION.z - e.mesh.position.z,
+            // )
+            // const dist = dir.length()
+            // if (dist < 1.0) {
+            //   enemyReachsBase(i)
+            //   continue
+            // }
+            // e.mesh.position.addInPlace(dir.normalize().scale(e.speed * delta))
             continue
           }
-          e.mesh.position.addInPlace(dir.normalize().scale(e.speed * delta))
+
           e.mesh.position.y = 0.5 + Math.sin(e.time * 2.5) * 0.15
-          e.mesh.rotation.y += 0.3 * delta
         }
 
         // タワーの発射
