@@ -117,6 +117,8 @@ export class GridMap {
           path.unshift(this.gridToWorld(n.x, n.z))
           n = n.parent
         }
+
+        path.shift()
         return path
       }
       openSet.splice(ci, 1)
