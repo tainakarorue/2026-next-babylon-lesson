@@ -1059,12 +1059,6 @@ export default function GameCanvas({
           }
         }
 
-        // ここは削除
-        // 敵の移動（拠点に向かって移動）
-        // for (let i = enemies.length - 1; i >= 0; i--) {
-        //   const e = enemies[i]
-        //   e.time += delta
-
         // 敵の移動（A* ウェイポイント追跡）
         for (let i = enemies.length - 1; i >= 0; i--) {
           const e = enemies[i]
@@ -1086,7 +1080,9 @@ export default function GameCanvas({
             } else {
               const dir = new Vector3(toTarget.x, 0, toTarget.z).normalize()
 
-              e.mesh.position.addInPlace(dir.scale(e.speed * delta))
+              e.mesh.position.addInPlace(
+                dir.scale(Math.min(e.speed * delta, dist)),
+              )
               e.mesh.rotation.y = Math.atan2(dir.x, dir.z)
             }
 
