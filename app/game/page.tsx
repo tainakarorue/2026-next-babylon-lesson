@@ -5,6 +5,9 @@ import dynamic from 'next/dynamic'
 
 import { HUD } from '@/components/game/HUD'
 import { TowerSelector } from '@/components/game/TowerSelector'
+import { LevelSelect } from '@/components/game/LevelSelect'
+import type { LevelConfig } from '@/lib/babylon/level-types'
+import { LEVELS } from '@/lib/babylon/levels'
 
 const GameCanvas = dynamic(() => import('@/components/game/GameCanvas'), {
   ssr: false,
@@ -25,15 +28,29 @@ export default function GamePage() {
   const [gold, setGold] = useState(200)
   const [selectedTower, setSelectedTower] = useState('basic')
   const [gameState, setGameState] = useState<
-    'menu' | 'playing' | 'pause' | 'gameover'
-  >('menu')
+    'levelSelect' | 'playing' | 'pause' | 'gameover'
+  >('levelSelect')
+  const [unlockedLevels, setUnlockedLevels] = useState<string[]>(['level1'])
+  const [currentLevel, setCurrentLevel] = useState<LevelConfig>(LEVELS[0])
 
   const gameControlRef = useRef<{
-    start: () => void
+    start: (level: LevelConfig) => void
     restart: () => void
   } | null>(null)
 
   const selectedTowerRef = useRef(selectedTower)
+
+  const handleLevelSelect = useCallback((levelId: string) => {
+    const level = LEVELS.find((l) => l.id === levelId)
+    if (!level) return
+    setCurrentLevel(level)
+    setScore(0)
+    setLives(level.startLives)
+    setWave(1)
+    setGold(level.startGold)
+    setGameState('playing')
+    setTimeout(() => gameControlRef.current?.start(level), 100)
+  }, [])
 
   const handleTowerSelect = useCallback((id: string) => {
     setSelectedTower(id)
@@ -60,15 +77,26 @@ export default function GamePage() {
       if (event.type === 'WAVE_STARTED' && event.wave !== undefined)
         setWave(event.wave)
 
+      if (event.type === 'LEVEL_CLEAR') {
+        const nextLevel =
+          LEVELS[LEVELS.findIndex((l) => l.id === currentLevel.id) + 1]
+        if (nextLevel) {
+          setUnlockedLevels((prev) =>
+            prev.includes(nextLevel.id) ? prev : [...prev, nextLevel.id],
+          )
+        }
+        setGameState('gameover')
+      }
+
       if (event.type === 'GAME_OVER') setGameState('gameover')
     },
-    [],
+    [currentLevel],
   )
 
-  const handleStart = useCallback(() => {
-    setGameState('playing')
-    gameControlRef.current?.start()
-  }, [])
+  // const handleStart = useCallback(() => {
+  //   setGameState('playing')
+  //   gameControlRef.current?.start()
+  // }, [])
 
   const handleRestart = useCallback(() => {
     setScore(0)
@@ -82,20 +110,31 @@ export default function GamePage() {
   return (
     <main className="w-full h-screen overflow-hidden bg-black">
       <GameCanvas
+        currentLevel={currentLevel}
         gameState={gameState}
         onGameEvent={handleGameEvent}
         controlRef={gameControlRef}
         selectedTowerRef={selectedTowerRef}
       />
-      <HUD
-        score={score}
-        lives={lives}
-        wave={wave}
-        gold={gold}
-        gameState={gameState}
-        onStart={handleStart}
-        onRestart={handleRestart}
-      />
+      {gameState === 'levelSelect' && (
+        <LevelSelect
+          onSelect={handleLevelSelect}
+          unlockedLevels={unlockedLevels}
+        />
+      )}
+      {(gameState === 'playing' || gameState === 'gameover') && (
+        <HUD
+          score={score}
+          lives={lives}
+          wave={wave}
+          gold={gold}
+          gameState={gameState}
+          onStart={() => {}}
+          onRestart={() => {
+            setGameState('levelSelect')
+          }}
+        />
+      )}
       {gameState === 'playing' && (
         <TowerSelector
           selectedTower={selectedTower}
