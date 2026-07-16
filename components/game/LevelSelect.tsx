@@ -31,7 +31,7 @@ export function LevelSelect({ onSelect, unlockedLevels }: LevelSelectProps) {
                 onClick={() => unlocked && onSelect(level.id)}
                 disabled={!unlocked}
                 className={[
-                  'w-52 p-5 roundex-xl border-2 bg-black/60 text-left transition-all backdrop-blur-sm',
+                  'w-52 p-5 rounded-xl border-2 bg-black/60 text-left transition-all backdrop-blur-sm',
                   difficultyStyle[level.difficulty],
                   unlocked
                     ? 'hover:bg-white/10 hover:scale-105 cursor-pointer'

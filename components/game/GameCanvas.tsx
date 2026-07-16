@@ -41,6 +41,7 @@ import type { GameEventCallback } from '@/app/game/page'
 import { registerShaders } from '@/lib/babylon/shader'
 import { SoundManager } from '@/lib/babylon/sound-manager'
 import { GridMap } from '@/lib/babylon/pathfinding'
+import { LevelConfig, WaveConfig } from '@/lib/babylon/level-types'
 
 interface EnemyHealthBar {
   plane: Mesh
@@ -50,69 +51,71 @@ interface EnemyHealthBar {
 }
 
 interface GameCanvasProps {
-  gameState: 'menu' | 'playing' | 'pause' | 'gameover'
+  currentLevel: LevelConfig
+  gameState: 'levelSelect' | 'playing' | 'pause' | 'gameover'
   onGameEvent: GameEventCallback
   controlRef: MutableRefObject<{
-    start: () => void
+    start: (level: LevelConfig) => void
     restart: () => void
   } | null>
   selectedTowerRef: MutableRefObject<string>
 }
 
-interface WaveConfig {
-  enemyCount: number
-  spawnInterval: number
-  enemySpeed: number
-  scorePerKill: number
-  enemyHp: number
-  goldPerKill: number
-}
+// interface WaveConfig {
+//   enemyCount: number
+//   spawnInterval: number
+//   enemySpeed: number
+//   scorePerKill: number
+//   enemyHp: number
+//   goldPerKill: number
+// }
 
-const WAVES: WaveConfig[] = [
-  {
-    enemyCount: 3,
-    spawnInterval: 2.0,
-    enemySpeed: 1.0,
-    scorePerKill: 10,
-    enemyHp: 2,
-    goldPerKill: 20,
-  },
-  {
-    enemyCount: 5,
-    spawnInterval: 1.5,
-    enemySpeed: 1.2,
-    scorePerKill: 15,
-    enemyHp: 3,
-    goldPerKill: 25,
-  },
-  {
-    enemyCount: 8,
-    spawnInterval: 1.0,
-    enemySpeed: 1.5,
-    scorePerKill: 20,
-    enemyHp: 4,
-    goldPerKill: 30,
-  },
-  {
-    enemyCount: 12,
-    spawnInterval: 0.8,
-    enemySpeed: 2.0,
-    scorePerKill: 30,
-    enemyHp: 6,
-    goldPerKill: 40,
-  },
-]
+// const WAVES: WaveConfig[] = [
+//   {
+//     enemyCount: 3,
+//     spawnInterval: 2.0,
+//     enemySpeed: 1.0,
+//     scorePerKill: 10,
+//     enemyHp: 2,
+//     goldPerKill: 20,
+//   },
+//   {
+//     enemyCount: 5,
+//     spawnInterval: 1.5,
+//     enemySpeed: 1.2,
+//     scorePerKill: 15,
+//     enemyHp: 3,
+//     goldPerKill: 25,
+//   },
+//   {
+//     enemyCount: 8,
+//     spawnInterval: 1.0,
+//     enemySpeed: 1.5,
+//     scorePerKill: 20,
+//     enemyHp: 4,
+//     goldPerKill: 30,
+//   },
+//   {
+//     enemyCount: 12,
+//     spawnInterval: 0.8,
+//     enemySpeed: 2.0,
+//     scorePerKill: 30,
+//     enemyHp: 6,
+//     goldPerKill: 40,
+//   },
+// ]
 
-const SPAWN_POINTS = [
-  new Vector3(9, 0.5, 9),
-  new Vector3(-9, 0.5, 9),
-  new Vector3(9, 0.5, -9),
-  new Vector3(-9, 0.5, -9),
-]
+// const SPAWN_POINTS = [
+//   new Vector3(9, 0.5, 9),
+//   new Vector3(-9, 0.5, 9),
+//   new Vector3(9, 0.5, -9),
+//   new Vector3(-9, 0.5, -9),
+// ]
 
-const BASE_POSITION = new Vector3(0, 0.5, 0)
+// const BASE_POSITION = new Vector3(0, 0.5, 0)
 
 export default function GameCanvas({
+  currentLevel,
   gameState: externalGameState,
   onGameEvent,
   controlRef,
@@ -138,7 +141,12 @@ export default function GameCanvas({
       // Scene を作成（3D 世界の器）
       const scene = new Scene(engine)
       // 背景色を宇宙空間の黒に設定（r, g, b, a）
-      scene.clearColor = new Color4(0.02, 0.02, 0.05, 1)
+      scene.clearColor = new Color4(
+        currentLevel.skyColor.r,
+        currentLevel.skyColor.g,
+        currentLevel.skyColor.b,
+        currentLevel.skyColor.a,
+      )
 
       registerShaders()
 
@@ -282,7 +290,7 @@ export default function GameCanvas({
         scene,
       )
 
-      hemisphericLight.intensity = 0.4
+      hemisphericLight.intensity = currentLevel.ambientIntensity
       hemisphericLight.diffuse = new Color3(0.6, 0.7, 1.0)
       hemisphericLight.groundColor = new Color3(0.1, 0.1, 0.2)
 
@@ -440,8 +448,9 @@ export default function GameCanvas({
         },
         scene,
       )
-      base.position = BASE_POSITION.clone()
+      base.position.x = currentLevel.basePosition.x
       base.position.y = 0.15
+      base.position.z = currentLevel.basePosition.z
       base.material = baseMat
       base.receiveShadows = true
       shadowGen.addShadowCaster(base)
@@ -496,17 +505,61 @@ export default function GameCanvas({
       stars.blendMode = ParticleSystem.BLENDMODE_ONEONE
       stars.start()
 
+      // ── Level state（startGame で更新される）────────────
+
+      let levelConfig: LevelConfig = currentLevel
+      let currentWaves: WaveConfig[] = currentLevel.waves
+      let spawnPoints: Vector3[] = currentLevel.spawnPoints.map(
+        (p) => new Vector3(p.x, 0.5, p.z),
+      )
+      let basePosition: Vector3 = new Vector3(
+        currentLevel.basePosition.x,
+        0.5,
+        currentLevel.basePosition.z,
+      )
+      let obstaclesMeshes: Mesh[] = []
+
       // ── Game State ─────────────────────────────────────
       let playing = false
       let score = 0
-      let lives = 20
-      let gold = 200
+      let lives = currentLevel.startLives
+      let gold = currentLevel.startGold
       let currentWaveIndex = 0
       let waveEnemiesRemaining = 0
       let waveEnemiesSpawned = 0
       let spawnTimer = 0
       let betweenWaveTimer = 0
       const BETWEEN_WAVE_DELAY = 5 // 秒
+
+      // ── Obstacle Mesh Builder ──────────────────────────
+      function createObstacleMeshes(level: LevelConfig): Mesh[] {
+        const meshes: Mesh[] = []
+        for (const obs of level.obstacles) {
+          const m =
+            obs.type === 'rock'
+              ? MeshBuilder.CreateSphere(
+                  `obs_${obs.x}_${obs.z}`,
+                  { diameter: 0.9 },
+                  scene,
+                )
+              : MeshBuilder.CreateBox(
+                  `obs_${obs.x}_${obs.z}`,
+                  {
+                    width: 1,
+                    height: 1,
+                    depth: 1,
+                  },
+                  scene,
+                )
+          m.position = new Vector3(obs.x, 0.5, obs.z)
+          m.material = towerBaseMat
+          m.receiveShadows = true
+          m.isPickable = false
+          shadowGen.addShadowCaster(m)
+          meshes.push(m)
+        }
+        return meshes
+      }
 
       // ── Explosion Effect ───────────────────────────────
 
@@ -621,11 +674,15 @@ export default function GameCanvas({
         pathIndex: number
       }[] = []
 
-      let gridMap = new GridMap(20)
+      let gridMap = new GridMap(currentLevel.mapSize)
+
+      for (const obs of currentLevel.obstacles) {
+        gridMap.setWalkable(obs.x, obs.z, false)
+      }
 
       function spawnEnemy(waveConfig: WaveConfig): void {
         const spawnPoint =
-          SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)]
+          spawnPoints[Math.floor(Math.random() * spawnPoints.length)]
 
         const mesh = MeshBuilder.CreateSphere(
           `enemy_${Date.now()}`,
@@ -644,12 +701,7 @@ export default function GameCanvas({
         const healthBar = createEnemyHealthBar(mesh, waveConfig.enemyHp)
 
         const path = gridMap
-          .findPath(
-            spawnPoint.x,
-            spawnPoint.z,
-            BASE_POSITION.x,
-            BASE_POSITION.z,
-          )
+          .findPath(spawnPoint.x, spawnPoint.z, basePosition.x, basePosition.z)
           .map((p) => ({ worldX: p.wx, worldZ: p.wz }))
 
         enemies.push({
@@ -743,9 +795,27 @@ export default function GameCanvas({
 
         if (occupied) return
 
+        // レベルの mapSize に基づく配置可能範囲
+        const halfSize = Math.floor(levelConfig.mapSize / 2) - 1
+
+        if (Math.abs(gridX) > halfSize || Math.abs(gridZ) > halfSize) return
+
+        // 拠点の近くには置けない
+        const bx = Math.round(basePosition.x)
+        const bz = Math.round(basePosition.z)
+
+        if (Math.abs(gridX - bx) <= 1 && Math.abs(gridZ - bz) <= 1) return
+
+        // 障害物の上には置けない
+        const blockedByObs = levelConfig.obstacles.some(
+          (o) => Math.round(o.x) === gridX && Math.round(o.z) === gridZ,
+        )
+
+        if (blockedByObs) return
+
         // 床の範囲外ならスキップ（床は -10〜10 の範囲）
-        if (Math.abs(gridX) > 9 || Math.abs(gridZ) > 9) return
-        if (Math.abs(gridX) < 1 && Math.abs(gridZ) < 1) return
+        // if (Math.abs(gridX) > 9 || Math.abs(gridZ) > 9) return
+        // if (Math.abs(gridX) < 1 && Math.abs(gridZ) < 1) return
 
         const towerType =
           TOWER_TYPES.find((t) => t.id === selectedTowerRef.current) ??
@@ -860,8 +930,8 @@ export default function GameCanvas({
             .findPath(
               Math.round(enemy.mesh.position.x),
               Math.round(enemy.mesh.position.z),
-              BASE_POSITION.x,
-              BASE_POSITION.z,
+              basePosition.x,
+              basePosition.z,
             )
             .map((p) => ({ worldX: p.wx, worldZ: p.wz }))
 
@@ -935,21 +1005,61 @@ export default function GameCanvas({
 
       // ── Game Start/Restart ─────────────────────────────
       function startWave(waveIndex: number): void {
-        const wave = WAVES[Math.min(waveIndex, WAVES.length - 1)]
+        const wave = currentWaves[Math.min(waveIndex, currentWaves.length - 1)]
         waveEnemiesSpawned = 0
         waveEnemiesRemaining = wave.enemyCount
         spawnTimer = 0
         onGameEvent({ type: 'WAVE_STARTED', wave: waveIndex + 1 })
       }
 
-      function startGame(): void {
+      function startGame(level: LevelConfig): void {
         playing = true
 
         // soundManager?.playBGM()
 
+        // レベル設定を更新
+        levelConfig = level
+        currentWaves = level.waves
+        spawnPoints = level.spawnPoints.map((p) => new Vector3(p.x, 0.5, p.z))
+        basePosition = new Vector3(
+          level.basePosition.x,
+          0.5,
+          level.basePosition.z,
+        )
+
+        // シーンのビジュアルを更新
+        scene.clearColor = new Color4(
+          level.skyColor.r,
+          level.skyColor.g,
+          level.skyColor.b,
+          level.skyColor.a,
+        )
+        hemisphericLight.intensity = level.ambientIntensity
+
+        // 拠点メッシュの位置を更新
+        // TODO: baseMesh.positionを更新する
+        base.position.x = level.basePosition.x
+        base.position.z = level.basePosition.z
+
+        // 障害物を再配置
+        for (const m of obstaclesMeshes) {
+          m.dispose()
+          // TODO: タイポを直す
+          // obstaclesMeshes = createObstacleMeshes(level)
+        }
+        obstaclesMeshes = createObstacleMeshes(level)
+
+        // グリッドマップをリセットして障害物を反映
+        gridMap = new GridMap(level.mapSize)
+
+        for (const obs of level.obstacles) {
+          gridMap.setWalkable(obs.x, obs.z, false)
+        }
+
+        // スコア・ライフ・ゴールドをレベル設定で初期化
         score = 0
-        lives = 20
-        gold = 200
+        lives = level.startLives
+        gold = level.startGold
         currentWaveIndex = 0
         betweenWaveTimer = 0
         // 既存の敵を全削除
@@ -983,8 +1093,8 @@ export default function GameCanvas({
         towerFireTimers.length = 0
         towerConfigs.length = 0
         towerShields.length = 0
-        gridMap = new GridMap(20)
-        startGame()
+        // gridMap = new GridMap(20)
+        startGame(levelConfig)
       }
 
       // controlRef に外部 API を登録
@@ -1030,7 +1140,8 @@ export default function GameCanvas({
 
         if (!playing) return
 
-        const currentWave = WAVES[Math.min(currentWaveIndex, WAVES.length - 1)]
+        const currentWave =
+          currentWaves[Math.min(currentWaveIndex, currentWaves.length - 1)]
 
         // 敵のスポーン
 
@@ -1051,11 +1162,14 @@ export default function GameCanvas({
           if (betweenWaveTimer >= BETWEEN_WAVE_DELAY) {
             betweenWaveTimer = 0
             currentWaveIndex++
-            if (currentWaveIndex >= WAVES.length) {
-              // 最終ウェーブクリア → ループ（難易度上昇付き）
-              currentWaveIndex = WAVES.length - 1
+            if (currentWaveIndex >= currentWaves.length) {
+              // TODO: 全ウェーブクリア → レベルクリア
+              playing = false
+              onGameEvent({ type: 'LEVEL_CLEAR' })
+              return
+            } else {
+              startWave(currentWaveIndex)
             }
-            startWave(currentWaveIndex)
           }
         }
 
@@ -1088,7 +1202,7 @@ export default function GameCanvas({
 
             const distToBase = Vector3.Distance(
               new Vector3(e.mesh.position.x, 0, e.mesh.position.z),
-              new Vector3(BASE_POSITION.x, 0, BASE_POSITION.z),
+              new Vector3(basePosition.x, 0, basePosition.z),
             )
 
             if (distToBase < 1.0) {
