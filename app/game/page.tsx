@@ -57,6 +57,10 @@ export default function GamePage() {
     selectedTowerRef.current = id
   }, [])
 
+  // レンダーごとに最新を反映
+  const currentLevelRef = useRef<LevelConfig>(LEVELS[0])
+  currentLevelRef.current = currentLevel
+
   const handleGameEvent = useCallback(
     (event: {
       type: string
@@ -79,7 +83,9 @@ export default function GamePage() {
 
       if (event.type === 'LEVEL_CLEAR') {
         const nextLevel =
-          LEVELS[LEVELS.findIndex((l) => l.id === currentLevel.id) + 1]
+          LEVELS[
+            LEVELS.findIndex((l) => l.id === currentLevelRef.current.id) + 1
+          ]
         if (nextLevel) {
           setUnlockedLevels((prev) =>
             prev.includes(nextLevel.id) ? prev : [...prev, nextLevel.id],
@@ -90,7 +96,7 @@ export default function GamePage() {
 
       if (event.type === 'GAME_OVER') setGameState('gameover')
     },
-    [currentLevel],
+    [],
   )
 
   // const handleStart = useCallback(() => {
@@ -98,14 +104,23 @@ export default function GamePage() {
   //   gameControlRef.current?.start()
   // }, [])
 
+  // const handleRestart = useCallback(() => {
+  //   setScore(0)
+  //   setLives(20)
+  //   setWave(1)
+  //   setGold(200)
+  //   setGameState('playing')
+  //   gameControlRef.current?.restart()
+  // }, [])
+
   const handleRestart = useCallback(() => {
     setScore(0)
-    setLives(20)
+    setLives(currentLevel.startLives)
     setWave(1)
-    setGold(200)
-    setGameState('playing')
+    setGold(currentLevel.startGold)
+    setGameState('levelSelect')
     gameControlRef.current?.restart()
-  }, [])
+  }, [currentLevel])
 
   return (
     <main className="w-full h-screen overflow-hidden bg-black">
@@ -130,9 +145,10 @@ export default function GamePage() {
           gold={gold}
           gameState={gameState}
           onStart={() => {}}
-          onRestart={() => {
-            setGameState('levelSelect')
-          }}
+          // onRestart={() => {
+          //   setGameState('levelSelect')
+          // }}
+          onRestart={handleRestart}
         />
       )}
       {gameState === 'playing' && (

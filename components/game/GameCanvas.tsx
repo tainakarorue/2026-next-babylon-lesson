@@ -1015,6 +1015,13 @@ export default function GameCanvas({
       function startGame(level: LevelConfig): void {
         playing = true
 
+        // 既存タワーを全削除（レベル切り替え時の残存を防止）
+        for (const t of towers) t.dispose()
+        towers.length = 0
+        towerFireTimers.length = 0
+        towerConfigs.length = 0
+        towerShields.length = 0
+
         // soundManager?.playBGM()
 
         // レベル設定を更新
@@ -1037,15 +1044,12 @@ export default function GameCanvas({
         hemisphericLight.intensity = level.ambientIntensity
 
         // 拠点メッシュの位置を更新
-        // TODO: baseMesh.positionを更新する
         base.position.x = level.basePosition.x
         base.position.z = level.basePosition.z
 
         // 障害物を再配置
         for (const m of obstaclesMeshes) {
           m.dispose()
-          // TODO: タイポを直す
-          // obstaclesMeshes = createObstacleMeshes(level)
         }
         obstaclesMeshes = createObstacleMeshes(level)
 
@@ -1088,11 +1092,11 @@ export default function GameCanvas({
 
       function restartGame(): void {
         // タワーを全削除
-        for (const t of towers) t.dispose()
-        towers.length = 0
-        towerFireTimers.length = 0
-        towerConfigs.length = 0
-        towerShields.length = 0
+        // for (const t of towers) t.dispose()
+        // towers.length = 0
+        // towerFireTimers.length = 0
+        // towerConfigs.length = 0
+        // towerShields.length = 0
         // gridMap = new GridMap(20)
         startGame(levelConfig)
       }
