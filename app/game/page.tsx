@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 
 import { HUD } from '@/components/game/HUD'
@@ -58,8 +58,15 @@ export default function GamePage() {
   }, [])
 
   // レンダーごとに最新を反映
-  const currentLevelRef = useRef<LevelConfig>(LEVELS[0])
-  currentLevelRef.current = currentLevel
+  // const currentLevelRef = useRef<LevelConfig>(LEVELS[0])
+  // currentLevelRef.current = currentLevel
+
+  const currentLevelRef = useRef<LevelConfig>(currentLevel)
+
+  // レンダーごとに最新を反映
+  useEffect(() => {
+    currentLevelRef.current = currentLevel
+  }, [currentLevel])
 
   const handleGameEvent = useCallback(
     (event: {
@@ -99,20 +106,6 @@ export default function GamePage() {
     [],
   )
 
-  // const handleStart = useCallback(() => {
-  //   setGameState('playing')
-  //   gameControlRef.current?.start()
-  // }, [])
-
-  // const handleRestart = useCallback(() => {
-  //   setScore(0)
-  //   setLives(20)
-  //   setWave(1)
-  //   setGold(200)
-  //   setGameState('playing')
-  //   gameControlRef.current?.restart()
-  // }, [])
-
   const handleRestart = useCallback(() => {
     setScore(0)
     setLives(currentLevel.startLives)
@@ -145,9 +138,6 @@ export default function GamePage() {
           gold={gold}
           gameState={gameState}
           onStart={() => {}}
-          // onRestart={() => {
-          //   setGameState('levelSelect')
-          // }}
           onRestart={handleRestart}
         />
       )}
